@@ -1,5 +1,7 @@
 package com.local.damaiassistant.config
 
+import java.util.Collections
+
 data class NormalizedRect(
     val left: Float,
     val top: Float,
@@ -65,7 +67,7 @@ data class StagePolicy(
     }
 }
 
-data class AutomationConfig(
+class AutomationConfig(
     val targetEpochMillis: Long,
     val preTriggerOffsetMillis: Long,
     val stage1Rect: NormalizedRect,
@@ -76,9 +78,12 @@ data class AutomationConfig(
     val stage3: StagePolicy,
     val screenshotMinIntervalMillis: Long,
     val maxScreenshotsPerStage: Int,
-    private val normalizedResultTexts: List<String>,
+    normalizedResultTexts: List<String>,
     val visualFallbackEnabled: Boolean,
 ) {
+    private val normalizedResultTexts: List<String> =
+        Collections.unmodifiableList(ArrayList(normalizedResultTexts))
+
     val resultTexts: List<String>
         get() = normalizedResultTexts
 
@@ -96,6 +101,84 @@ data class AutomationConfig(
             "Result texts must be trimmed and nonblank"
         }
     }
+
+    fun copy(
+        targetEpochMillis: Long = this.targetEpochMillis,
+        preTriggerOffsetMillis: Long = this.preTriggerOffsetMillis,
+        stage1Rect: NormalizedRect = this.stage1Rect,
+        stage2Rect: NormalizedRect = this.stage2Rect,
+        stage3Rect: NormalizedRect = this.stage3Rect,
+        stage1: StagePolicy = this.stage1,
+        stage2: StagePolicy = this.stage2,
+        stage3: StagePolicy = this.stage3,
+        screenshotMinIntervalMillis: Long = this.screenshotMinIntervalMillis,
+        maxScreenshotsPerStage: Int = this.maxScreenshotsPerStage,
+        normalizedResultTexts: List<String> = this.normalizedResultTexts,
+        visualFallbackEnabled: Boolean = this.visualFallbackEnabled,
+    ): AutomationConfig = AutomationConfig(
+        targetEpochMillis = targetEpochMillis,
+        preTriggerOffsetMillis = preTriggerOffsetMillis,
+        stage1Rect = stage1Rect,
+        stage2Rect = stage2Rect,
+        stage3Rect = stage3Rect,
+        stage1 = stage1,
+        stage2 = stage2,
+        stage3 = stage3,
+        screenshotMinIntervalMillis = screenshotMinIntervalMillis,
+        maxScreenshotsPerStage = maxScreenshotsPerStage,
+        normalizedResultTexts = normalizedResultTexts,
+        visualFallbackEnabled = visualFallbackEnabled,
+    )
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is AutomationConfig) return false
+
+        return targetEpochMillis == other.targetEpochMillis &&
+            preTriggerOffsetMillis == other.preTriggerOffsetMillis &&
+            stage1Rect == other.stage1Rect &&
+            stage2Rect == other.stage2Rect &&
+            stage3Rect == other.stage3Rect &&
+            stage1 == other.stage1 &&
+            stage2 == other.stage2 &&
+            stage3 == other.stage3 &&
+            screenshotMinIntervalMillis == other.screenshotMinIntervalMillis &&
+            maxScreenshotsPerStage == other.maxScreenshotsPerStage &&
+            normalizedResultTexts == other.normalizedResultTexts &&
+            visualFallbackEnabled == other.visualFallbackEnabled
+    }
+
+    override fun hashCode(): Int {
+        var result = targetEpochMillis.hashCode()
+        result = 31 * result + preTriggerOffsetMillis.hashCode()
+        result = 31 * result + stage1Rect.hashCode()
+        result = 31 * result + stage2Rect.hashCode()
+        result = 31 * result + stage3Rect.hashCode()
+        result = 31 * result + stage1.hashCode()
+        result = 31 * result + stage2.hashCode()
+        result = 31 * result + stage3.hashCode()
+        result = 31 * result + screenshotMinIntervalMillis.hashCode()
+        result = 31 * result + maxScreenshotsPerStage
+        result = 31 * result + normalizedResultTexts.hashCode()
+        result = 31 * result + visualFallbackEnabled.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "AutomationConfig(" +
+            "targetEpochMillis=$targetEpochMillis, " +
+            "preTriggerOffsetMillis=$preTriggerOffsetMillis, " +
+            "stage1Rect=$stage1Rect, " +
+            "stage2Rect=$stage2Rect, " +
+            "stage3Rect=$stage3Rect, " +
+            "stage1=$stage1, " +
+            "stage2=$stage2, " +
+            "stage3=$stage3, " +
+            "screenshotMinIntervalMillis=$screenshotMinIntervalMillis, " +
+            "maxScreenshotsPerStage=$maxScreenshotsPerStage, " +
+            "normalizedResultTexts=$normalizedResultTexts, " +
+            "visualFallbackEnabled=$visualFallbackEnabled" +
+            ")"
 
     companion object {
         operator fun invoke(

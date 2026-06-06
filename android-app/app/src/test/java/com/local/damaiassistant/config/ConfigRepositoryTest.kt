@@ -101,6 +101,34 @@ class ConfigRepositoryTest {
     }
 
     @Test
+    fun automationConfigResultTextsCannotBeMutatedExternally() {
+        val defaults = AutomationConfig.defaults()
+        val suppliedResultTexts = mutableListOf("Pay", "Order")
+        val config = AutomationConfig(
+            targetEpochMillis = defaults.targetEpochMillis,
+            preTriggerOffsetMillis = defaults.preTriggerOffsetMillis,
+            stage1Rect = defaults.stage1Rect,
+            stage2Rect = defaults.stage2Rect,
+            stage3Rect = defaults.stage3Rect,
+            stage1 = defaults.stage1,
+            stage2 = defaults.stage2,
+            stage3 = defaults.stage3,
+            screenshotMinIntervalMillis = defaults.screenshotMinIntervalMillis,
+            maxScreenshotsPerStage = defaults.maxScreenshotsPerStage,
+            normalizedResultTexts = suppliedResultTexts,
+            visualFallbackEnabled = defaults.visualFallbackEnabled,
+        )
+
+        suppliedResultTexts[0] = " "
+        runCatching {
+            @Suppress("UNCHECKED_CAST")
+            (config.resultTexts as MutableList<String>).add("")
+        }
+
+        assertEquals(listOf("Pay", "Order"), config.resultTexts)
+    }
+
+    @Test
     fun automationConfigCopySupportsPlanUpdates() {
         val updatedRect = NormalizedRect(0.63f, 0.86f, 0.98f, 0.89f)
 
