@@ -115,7 +115,7 @@ class ConfigRepositoryTest {
             stage3 = defaults.stage3,
             screenshotMinIntervalMillis = defaults.screenshotMinIntervalMillis,
             maxScreenshotsPerStage = defaults.maxScreenshotsPerStage,
-            normalizedResultTexts = suppliedResultTexts,
+            resultTexts = suppliedResultTexts,
             visualFallbackEnabled = defaults.visualFallbackEnabled,
         )
 
@@ -135,10 +135,12 @@ class ConfigRepositoryTest {
         val updated = AutomationConfig.defaults().copy(
             targetEpochMillis = 1_800_000_000_000L,
             stage1Rect = updatedRect,
+            resultTexts = listOf("  Complete  "),
         )
 
         assertEquals(1_800_000_000_000L, updated.targetEpochMillis)
         assertEquals(updatedRect, updated.stage1Rect)
+        assertEquals(listOf("Complete"), updated.resultTexts)
     }
 
     @Test

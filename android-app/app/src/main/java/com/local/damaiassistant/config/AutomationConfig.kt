@@ -78,11 +78,16 @@ class AutomationConfig(
     val stage3: StagePolicy,
     val screenshotMinIntervalMillis: Long,
     val maxScreenshotsPerStage: Int,
-    normalizedResultTexts: List<String>,
+    resultTexts: List<String>,
     val visualFallbackEnabled: Boolean,
 ) {
     private val normalizedResultTexts: List<String> =
-        Collections.unmodifiableList(ArrayList(normalizedResultTexts))
+        Collections.unmodifiableList(
+            resultTexts
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toList(),
+        )
 
     val resultTexts: List<String>
         get() = normalizedResultTexts
@@ -113,7 +118,7 @@ class AutomationConfig(
         stage3: StagePolicy = this.stage3,
         screenshotMinIntervalMillis: Long = this.screenshotMinIntervalMillis,
         maxScreenshotsPerStage: Int = this.maxScreenshotsPerStage,
-        normalizedResultTexts: List<String> = this.normalizedResultTexts,
+        resultTexts: List<String> = this.normalizedResultTexts,
         visualFallbackEnabled: Boolean = this.visualFallbackEnabled,
     ): AutomationConfig = AutomationConfig(
         targetEpochMillis = targetEpochMillis,
@@ -126,7 +131,7 @@ class AutomationConfig(
         stage3 = stage3,
         screenshotMinIntervalMillis = screenshotMinIntervalMillis,
         maxScreenshotsPerStage = maxScreenshotsPerStage,
-        normalizedResultTexts = normalizedResultTexts,
+        resultTexts = resultTexts,
         visualFallbackEnabled = visualFallbackEnabled,
     )
 
@@ -176,49 +181,11 @@ class AutomationConfig(
             "stage3=$stage3, " +
             "screenshotMinIntervalMillis=$screenshotMinIntervalMillis, " +
             "maxScreenshotsPerStage=$maxScreenshotsPerStage, " +
-            "normalizedResultTexts=$normalizedResultTexts, " +
+            "resultTexts=$normalizedResultTexts, " +
             "visualFallbackEnabled=$visualFallbackEnabled" +
             ")"
 
     companion object {
-        operator fun invoke(
-            targetEpochMillis: Long,
-            preTriggerOffsetMillis: Long,
-            stage1Rect: NormalizedRect,
-            stage2Rect: NormalizedRect,
-            stage3Rect: NormalizedRect,
-            stage1: StagePolicy,
-            stage2: StagePolicy,
-            stage3: StagePolicy,
-            screenshotMinIntervalMillis: Long,
-            maxScreenshotsPerStage: Int,
-            resultTexts: List<String>,
-            visualFallbackEnabled: Boolean,
-        ): AutomationConfig {
-            val normalizedResultTexts = resultTexts
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .toList()
-            require(normalizedResultTexts.isNotEmpty()) {
-                "At least one nonblank result text is required"
-            }
-
-            return AutomationConfig(
-                targetEpochMillis = targetEpochMillis,
-                preTriggerOffsetMillis = preTriggerOffsetMillis,
-                stage1Rect = stage1Rect,
-                stage2Rect = stage2Rect,
-                stage3Rect = stage3Rect,
-                stage1 = stage1,
-                stage2 = stage2,
-                stage3 = stage3,
-                screenshotMinIntervalMillis = screenshotMinIntervalMillis,
-                maxScreenshotsPerStage = maxScreenshotsPerStage,
-                normalizedResultTexts = normalizedResultTexts,
-                visualFallbackEnabled = visualFallbackEnabled,
-            )
-        }
-
         fun defaults(): AutomationConfig {
             val placeholderRect = NormalizedRect(0.55f, 0.80f, 0.95f, 0.95f)
             return AutomationConfig(
