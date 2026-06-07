@@ -3,6 +3,7 @@ package com.local.damaiassistant.service
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
@@ -18,6 +19,7 @@ import com.local.damaiassistant.config.AutomationConfig
 import com.local.damaiassistant.config.ConfigRepository
 import com.local.damaiassistant.config.NormalizedRect
 import com.local.damaiassistant.config.PixelPoint
+import com.local.damaiassistant.config.PixelRect
 import com.local.damaiassistant.config.SharedPreferencesKeyValueStore
 import com.local.damaiassistant.debug.DebugCaptureManager
 import com.local.damaiassistant.domain.RuntimeSnapshot
@@ -148,7 +150,6 @@ class DamaiAccessibilityService : AccessibilityService() {
     ) : AutomationControl {
         override fun arm(config: AutomationConfig): Result<Unit> = runCatching {
             check(!closed.get()) { "Accessibility service is disconnected" }
-            repository.save(config)
             coordinator.arm(config)
         }
 
@@ -360,11 +361,18 @@ class DamaiAccessibilityService : AccessibilityService() {
             point: PixelPoint?,
             callback: (Boolean) -> Unit,
         ): Boolean {
-            if (closed.get() || !isDamaiActiveWindow()) return false
-            val target = point ?: bounds.toPixels(
-                screenWidth(),
-                screenHeight(),
-            ).center()
+            if (closed.get()) return false
+            val root = damaiRootInActiveWindow() ?: return false
+            val target = try {
+                runCatching {
+                    point ?: bounds.toPixels(
+                        screenWidth(),
+                        screenHeight(),
+                    ).clipTo(root.windowPixelRect()).center()
+                }.getOrNull() ?: return false
+            } finally {
+                recycle(root)
+            }
             return gestures.click(target, requestId.incrementAndGet()) { _, succeeded ->
                 callback(succeeded)
             }
@@ -372,6 +380,12 @@ class DamaiAccessibilityService : AccessibilityService() {
 
         override fun clearPending() {
             gestures.clearPending()
+        }
+
+        private fun AccessibilityNodeInfo.windowPixelRect(): PixelRect {
+            val rect = Rect()
+            getBoundsInScreen(rect)
+            return PixelRect(rect.left, rect.top, rect.right, rect.bottom)
         }
     }
 

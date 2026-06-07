@@ -156,9 +156,6 @@ class MainActivity : Activity() {
     private fun arm() {
         val control = app.automationControl()
             ?: return showMessage(getString(R.string.service_not_connected))
-        if (app.foregroundPackage() != DAMAI_PACKAGE) {
-            return showMessage(getString(R.string.open_damai_first))
-        }
         val power = getSystemService(PowerManager::class.java)
         if (!power.isInteractive) {
             return showMessage(getString(R.string.screen_must_be_awake))
@@ -170,12 +167,8 @@ class MainActivity : Activity() {
             ?.takeIf { it >= 0L }
             ?: return showMessage(getString(R.string.invalid_offset))
         val now = System.currentTimeMillis()
-        val effectiveTarget = if (testNow.isChecked) {
-            now + parsedOffset + TEST_NOW_DELAY_MILLIS
-        } else {
-            parsedTarget
-        }
-        if (effectiveTarget - parsedOffset <= now) {
+        val immediateTest = testNow.isChecked
+        if (!immediateTest && parsedTarget - parsedOffset <= now) {
             return showMessage(getString(R.string.trigger_must_be_future))
         }
         val configuredResultTexts = resultTexts.text.toString()
@@ -186,19 +179,37 @@ class MainActivity : Activity() {
             return showMessage(getString(R.string.result_text_required))
         }
 
-        val config = repository.load().copy(
-            targetEpochMillis = effectiveTarget,
+        val savedConfig = repository.load().copy(
+            targetEpochMillis = parsedTarget,
             preTriggerOffsetMillis = parsedOffset,
             resultTexts = configuredResultTexts,
             visualFallbackEnabled = visualFallback.isChecked,
         )
-        repository.save(config)
-        control.arm(config).fold(
-            onSuccess = {
-                showInstruction(R.string.return_to_damai_manually)
+        val plan = ArmConfigPlan(savedConfig, immediateTest)
+        repository.save(plan.savedConfig)
+        showInstruction(
+            if (immediateTest) {
+                R.string.return_to_damai_for_immediate_test
+            } else {
+                R.string.return_to_damai_manually
             },
-            onFailure = { showMessage(getString(R.string.arm_failed)) },
         )
+        awaitDamaiForeground(control) {
+            val readyAt = System.currentTimeMillis()
+            val runtimeConfig = runCatching {
+                plan.runtimeConfig(readyAt, TEST_NOW_DELAY_MILLIS)
+            }.getOrElse {
+                showMessageOnUiThread(R.string.arm_failed)
+                return@awaitDamaiForeground
+            }
+            if (runtimeConfig.targetEpochMillis - runtimeConfig.preTriggerOffsetMillis <= readyAt) {
+                showMessageOnUiThread(R.string.trigger_must_be_future)
+                return@awaitDamaiForeground
+            }
+            control.arm(runtimeConfig).onFailure {
+                showMessageOnUiThread(R.string.arm_failed)
+            }
+        }
     }
 
     private fun showStageChooser() {

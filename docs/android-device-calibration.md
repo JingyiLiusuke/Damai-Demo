@@ -9,14 +9,14 @@
 - 编译 API：36
 - Build Tools：36.0.0
 - Platform Tools：37.0.0
-- JVM 测试：70 个，0 失败
+- JVM 测试：73 个，0 失败
 - 真机仪器测试：3 个，0 失败
 - Debug APK：`android-app/app/build/outputs/apk/debug/app-debug.apk`
 
 Debug APK SHA-256：
 
 ```text
-D42EBF2618E1B31F7D287A18263C0FA84E3494899EEEEDCB3EE7D556DC040E8D
+DD8B52FD5D9E621909029B76516C004CCEFEF0ED638FDC8BE26A7CF34E82652C
 ```
 
 ## 使用边界
@@ -31,6 +31,10 @@ D42EBF2618E1B31F7D287A18263C0FA84E3494899EEEEDCB3EE7D556DC040E8D
 4. 导出截图、节点树、配置和运行日志。
 
 节点检查、节点点击、坐标手势和视觉截图执行前都会重新校验活动窗口。窗口不属于大麦时不会发送动作。
+
+“开始待命”只保存用户填写的开售时间。立即测试使用独立的临时运行时间，不会覆盖该开售时间。两种模式都会先等待用户手动切回大麦并确认页面稳定；立即测试从确认稳定后再倒计时约 500 毫秒。
+
+底部阶段按钮按全屏截图校准，但发送坐标手势前会裁剪到当前大麦活动窗口边界，避免系统导航栏把按钮区域中心点挤到窗口外。
 
 ## 安装与启用
 
@@ -63,6 +67,8 @@ adb shell am start -n com.local.damaiassistant/.ui.MainActivity
 - 触发调试采集后，通过系统任务切换回原大麦任务，仍保持在同一项目详情页。
 - 调试 ZIP 成功生成，`screen.png` 与 `nodes.txt` 均来自同一大麦详情页。
 - 助手未点击“立即购票”，未进入下单流程。
+
+2026-06-07 后续复测确认：阶段一底部校准坐标在裁剪到大麦窗口后，点击中心约为 `(1011, 2609)`，可从 `ProjectDetailActivity` 进入 `NcovSkuActivity` 票档页。该复测只验证阶段一跳转，未点击“确定票价”或“立即提交”。
 
 ## 测试命令
 

@@ -47,6 +47,13 @@ data class PixelRect(
         x = ((left.toLong() + right.toLong()) / 2L).toInt(),
         y = ((top.toLong() + bottom.toLong()) / 2L).toInt(),
     )
+
+    fun clipTo(bounds: PixelRect): PixelRect = PixelRect(
+        left = maxOf(left, bounds.left),
+        top = maxOf(top, bounds.top),
+        right = minOf(right, bounds.right),
+        bottom = minOf(bottom, bounds.bottom),
+    )
 }
 
 data class PixelPoint(val x: Int, val y: Int)

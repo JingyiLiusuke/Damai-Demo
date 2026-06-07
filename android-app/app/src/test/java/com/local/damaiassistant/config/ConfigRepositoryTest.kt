@@ -19,6 +19,19 @@ class ConfigRepositoryTest {
     }
 
     @Test
+    fun pixelRectClipsToActiveWindowBeforeComputingBottomButtonCenter() {
+        val fullDisplayRect = NormalizedRect(
+            left = 0.5603124f,
+            top = 0.933097f,
+            right = 0.94503224f,
+            bottom = 0.9893664f,
+        ).toPixels(width = 1344, height = 2772)
+        val damaiWindow = PixelRect(0, 0, 1344, 2632)
+
+        assertEquals(PixelPoint(1011, 2609), fullDisplayRect.clipTo(damaiWindow).center())
+    }
+
+    @Test
     fun normalizedRectRejectsNonFiniteOrUnorderedEdges() {
         val invalidRects = listOf(
             { NormalizedRect(Float.NaN, 0f, 1f, 1f) },

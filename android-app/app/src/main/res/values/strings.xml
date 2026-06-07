@@ -8,7 +8,7 @@
     <string name="section_time">一、时间设置</string>
     <string name="target_time_label">目标开售时间（格式：yyyy-MM-dd HH:mm:ss.SSS）</string>
     <string name="pre_trigger_offset_hint">提前触发时间（毫秒，例如 100）</string>
-    <string name="test_now_label">立即测试模式（约 500 毫秒后触发，仅用于安全测试）</string>
+    <string name="test_now_label">立即测试模式（切回大麦并稳定后约 500 毫秒触发，仅用于安全测试）</string>
     <string name="section_regions">二、阶段点击区域</string>
     <string name="regions_help">阶段一：立即预定；阶段二：确定票价；阶段三：立即提交。点击“校准阶段区域”重新截图并框选按钮。</string>
     <string name="section_detection">三、检测设置</string>
@@ -42,7 +42,8 @@
     <string name="result_text_required">请至少填写一个成功结果文字</string>
     <string name="arm_failed">无法开始待命</string>
     <string name="export_failed">日志导出失败</string>
-    <string name="return_to_damai_manually">已进入待命，请立即手动返回大麦目标页面并保持在前台</string>
+    <string name="return_to_damai_manually">配置已保存，请在 10 秒内手动返回大麦目标页面；识别稳定后进入待命</string>
+    <string name="return_to_damai_for_immediate_test">测试配置已保存，请在 10 秒内手动返回大麦目标页面；识别稳定后约 500 毫秒触发</string>
     <string name="choose_stage">选择要校准的阶段</string>
     <string name="stage_1_name">阶段一：立即预定</string>
     <string name="stage_2_name">阶段二：确定票价</string>
