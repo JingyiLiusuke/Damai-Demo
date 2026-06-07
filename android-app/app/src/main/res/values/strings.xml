@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Damai Assistant</string>
+    <string name="accessibility_service_name">Damai Assistant Automation</string>
+    <string name="accessibility_service_description">Runs a local, user-controlled Damai ticket workflow using accessibility nodes, gestures, and screenshots.</string>
 </resources>
