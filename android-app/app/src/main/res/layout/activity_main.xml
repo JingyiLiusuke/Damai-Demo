@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Target time (yyyy-MM-dd HH:mm:ss.SSS)" />
+
+        <EditText
+            android:id="@+id/target_time_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text" />
+
+        <EditText
+            android:id="@+id/pre_trigger_offset_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Pre-trigger offset (ms)"
+            android:inputType="number" />
+
+        <Switch
+            android:id="@+id/test_now_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Test now (trigger after 500 ms)" />
+
+        <TextView
+            android:id="@+id/stage1_rect_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/stage2_rect_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/stage3_rect_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <Switch
+            android:id="@+id/visual_fallback_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Enable visual fallback" />
+
+        <EditText
+            android:id="@+id/result_text_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="top"
+            android:hint="Result texts, one per line"
+            android:inputType="textMultiLine"
+            android:minLines="3" />
+
+        <TextView
+            android:id="@+id/accessibility_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/run_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/recent_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minLines="2" />
+
+        <Button
+            android:id="@+id/open_accessibility_settings_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Open accessibility settings" />
+
+        <Button
+            android:id="@+id/calibrate_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Calibrate stage" />
+
+        <Button
+            android:id="@+id/arm_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Arm" />
+
+        <Button
+            android:id="@+id/stop_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Stop" />
+
+        <Button
+            android:id="@+id/export_log_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Export run log" />
+
+        <Button
+            android:id="@+id/debug_capture_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Capture debug screenshot" />
+    </LinearLayout>
+</ScrollView>
