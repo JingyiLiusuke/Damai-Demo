@@ -29,7 +29,8 @@ class AutomationFixtureActivity : Activity() {
                         addView(
                             TextView(context).apply {
                                 text = "立即提交"
-                                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                                importantForAccessibility =
+                                    View.IMPORTANT_FOR_ACCESSIBILITY_YES
                             },
                         )
                     },

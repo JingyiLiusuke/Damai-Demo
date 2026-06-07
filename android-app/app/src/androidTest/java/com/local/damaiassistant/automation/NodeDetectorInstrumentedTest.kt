@@ -22,7 +22,7 @@ class NodeDetectorInstrumentedTest {
     @Before
     fun launchFixture() {
         val intent = Intent(
-            instrumentation.context,
+            instrumentation.targetContext,
             AutomationFixtureActivity::class.java,
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         activity = instrumentation.startActivitySync(intent) as AutomationFixtureActivity
@@ -32,8 +32,10 @@ class NodeDetectorInstrumentedTest {
 
     @After
     fun closeFixture() {
-        activity.runOnUiThread { activity.finish() }
-        instrumentation.waitForIdleSync()
+        if (::activity.isInitialized) {
+            activity.runOnUiThread { activity.finish() }
+            instrumentation.waitForIdleSync()
+        }
     }
 
     @Test
