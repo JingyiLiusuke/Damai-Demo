@@ -37,7 +37,13 @@ class CalibrationActivity : Activity() {
             return
         }
         setContentView(R.layout.activity_calibration)
-        title = "Calibrate $stage"
+        title = getString(
+            when (stage) {
+                Stage.STAGE_1 -> R.string.stage_1_name
+                Stage.STAGE_2 -> R.string.stage_2_name
+                Stage.STAGE_3 -> R.string.stage_3_name
+            },
+        )
         repository = ConfigRepository(
             SharedPreferencesKeyValueStore(
                 getSharedPreferences(CONFIG_PREFERENCES, Context.MODE_PRIVATE),
@@ -65,19 +71,21 @@ class CalibrationActivity : Activity() {
         val bitmap = BitmapFactory.decodeFile(file.absolutePath)
         file.delete()
         if (bitmap == null) {
-            status.text = "Unable to decode calibration screenshot"
+            status.setText(R.string.calibration_loading_failed)
             return
         }
         screenshot = bitmap
         selectionView.setBitmap(bitmap)
         selectionView.setSelection(repository.load().rectFor(stage))
-        status.text = "Drag to select; drag inside to move; drag corners to resize"
+        status.setText(R.string.calibration_instructions)
     }
 
     private fun saveCalibration() {
-        val bitmap = screenshot ?: return showMessage("No screenshot available")
+        val bitmap = screenshot ?: return showMessage(
+            getString(R.string.calibration_no_screenshot),
+        )
         val selection = selectionView.selection()
-            ?: return showMessage("Select an area at least 20 x 20 pixels")
+            ?: return showMessage(getString(R.string.calibration_selection_too_small))
         val pixels = selection.toPixels(bitmap.width, bitmap.height)
         val cropped = Bitmap.createBitmap(
             bitmap,
@@ -106,12 +114,15 @@ class CalibrationActivity : Activity() {
         }
         result.fold(
             onSuccess = { file ->
-                status.text =
-                    "Saved ${pixels.right - pixels.left} x " +
-                    "${pixels.bottom - pixels.top}: ${file.absolutePath}"
+                status.text = getString(
+                    R.string.calibration_saved,
+                    pixels.right - pixels.left,
+                    pixels.bottom - pixels.top,
+                    file.absolutePath,
+                )
             },
-            onFailure = { error ->
-                showMessage(error.message ?: "Unable to save calibration")
+            onFailure = {
+                showMessage(getString(R.string.calibration_save_failed))
             },
         )
     }

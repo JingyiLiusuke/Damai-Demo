@@ -121,10 +121,10 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     result.fold(
                         onSuccess = { file -> recentLog.text = file.absolutePath },
-                        onFailure = { error -> showMessage(error.message ?: "Export failed") },
+                        onFailure = { showMessage(getString(R.string.export_failed)) },
                     )
                 }
-            } ?: showMessage("Accessibility service is not connected")
+            } ?: showMessage(getString(R.string.service_not_connected))
         }
         debugCaptureButton.setOnClickListener {
             beginDebugCapture()
@@ -156,20 +156,20 @@ class MainActivity : Activity() {
 
     private fun arm() {
         val control = app.automationControl()
-            ?: return showMessage("Enable and connect the accessibility service first")
+            ?: return showMessage(getString(R.string.service_not_connected))
         if (app.foregroundPackage() != DAMAI_PACKAGE) {
-            return showMessage("Open Damai and wait for the service to observe it first")
+            return showMessage(getString(R.string.open_damai_first))
         }
         val power = getSystemService(PowerManager::class.java)
         if (!power.isInteractive) {
-            return showMessage("The screen must be awake")
+            return showMessage(getString(R.string.screen_must_be_awake))
         }
 
         val parsedTarget = parseTargetTime(targetTime.text.toString())
-            ?: return showMessage("Target format: yyyy-MM-dd HH:mm:ss.SSS")
+            ?: return showMessage(getString(R.string.invalid_target_time))
         val parsedOffset = offset.text.toString().toLongOrNull()
             ?.takeIf { it >= 0L }
-            ?: return showMessage("Pre-trigger offset must be a nonnegative integer")
+            ?: return showMessage(getString(R.string.invalid_offset))
         val now = System.currentTimeMillis()
         val effectiveTarget = if (testNow.isChecked) {
             now + parsedOffset + TEST_NOW_DELAY_MILLIS
@@ -177,14 +177,14 @@ class MainActivity : Activity() {
             parsedTarget
         }
         if (effectiveTarget - parsedOffset <= now) {
-            return showMessage("Trigger time must be in the future")
+            return showMessage(getString(R.string.trigger_must_be_future))
         }
         val configuredResultTexts = resultTexts.text.toString()
             .split('\n', ',', '，')
             .map(String::trim)
             .filter(String::isNotEmpty)
         if (configuredResultTexts.isEmpty()) {
-            return showMessage("At least one result text is required")
+            return showMessage(getString(R.string.result_text_required))
         }
 
         val config = repository.load().copy(
@@ -196,15 +196,21 @@ class MainActivity : Activity() {
         repository.save(config)
         control.arm(config).fold(
             onSuccess = { returnToDamai(control) },
-            onFailure = { error -> showMessage(error.message ?: "Unable to arm") },
+            onFailure = { showMessage(getString(R.string.arm_failed)) },
         )
     }
 
     private fun showStageChooser() {
         val stages = Stage.entries.toTypedArray()
         AlertDialog.Builder(this)
-            .setTitle("Choose calibration stage")
-            .setItems(arrayOf("Stage 1", "Stage 2", "Stage 3")) { _, index ->
+            .setTitle(R.string.choose_stage)
+            .setItems(
+                arrayOf(
+                    getString(R.string.stage_1_name),
+                    getString(R.string.stage_2_name),
+                    getString(R.string.stage_3_name),
+                ),
+            ) { _, index ->
                 beginCalibration(stages[index])
             }
             .show()
@@ -212,8 +218,8 @@ class MainActivity : Activity() {
 
     private fun beginCalibration(stage: Stage) {
         val control = app.automationControl()
-            ?: return showMessage("Accessibility service is not connected")
-        showMessage("Switching to Damai for capture. Return here after the screenshot.")
+            ?: return showMessage(getString(R.string.service_not_connected))
+        showMessage(getString(R.string.switching_for_calibration))
         if (!launchDamai()) return
         mainHandler.postDelayed(
             {
@@ -240,8 +246,8 @@ class MainActivity : Activity() {
 
     private fun beginDebugCapture() {
         val control = app.automationControl()
-            ?: return showMessage("Accessibility service is not connected")
-        showMessage("Switching to Damai for debug capture. Return here when complete.")
+            ?: return showMessage(getString(R.string.service_not_connected))
+        showMessage(getString(R.string.switching_for_debug))
         if (!launchDamai()) return
         mainHandler.postDelayed(
             {
@@ -265,7 +271,7 @@ class MainActivity : Activity() {
     private fun launchDamai(): Boolean {
         val launchIntent = packageManager.getLaunchIntentForPackage(DAMAI_PACKAGE)
         if (launchIntent == null) {
-            showMessage("Damai is not installed")
+            showMessage(getString(R.string.damai_not_installed))
             return false
         }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
@@ -275,19 +281,27 @@ class MainActivity : Activity() {
 
     private fun refreshConnectionStatus() {
         val connected = app.automationControl() != null
-        val foreground = app.foregroundPackage() ?: "none"
-        accessibilityStatus.text =
-            "Accessibility: ${if (connected) "connected" else "disconnected"}; " +
-            "last package: $foreground"
+        val foreground = app.foregroundPackage() ?: getString(R.string.none)
+        accessibilityStatus.text = getString(
+            R.string.accessibility_status_format,
+            getString(if (connected) R.string.connected else R.string.disconnected),
+            foreground,
+        )
     }
 
     private fun renderSnapshot(snapshot: RuntimeSnapshot) {
         refreshConnectionStatus()
-        runState.text = "${snapshot.state}: ${snapshot.message}"
+        runState.text = getString(
+            R.string.run_state_format,
+            stateLabel(snapshot.state),
+            messageLabel(snapshot.message),
+        )
         recentLog.text = app.automationControl()
             ?.recentLogs()
             ?.takeLast(5)
-            ?.joinToString("\n") { entry -> "${entry.category}: ${entry.message}" }
+            ?.joinToString("\n") { entry ->
+                "${categoryLabel(entry.category)}：${messageLabel(entry.message)}"
+            }
             .orEmpty()
         val active = snapshot.state in ACTIVE_STATES
         armButton.isEnabled = !active
@@ -296,12 +310,64 @@ class MainActivity : Activity() {
     }
 
     private fun formatRect(stage: Stage, rect: NormalizedRect): String =
-        "$stage: %.3f, %.3f, %.3f, %.3f".format(
+        "${stageLabel(stage)}：%.3f, %.3f, %.3f, %.3f".format(
             rect.left,
             rect.top,
             rect.right,
             rect.bottom,
         )
+
+    private fun stageLabel(stage: Stage): String = getString(
+        when (stage) {
+            Stage.STAGE_1 -> R.string.stage_1_name
+            Stage.STAGE_2 -> R.string.stage_2_name
+            Stage.STAGE_3 -> R.string.stage_3_name
+        },
+    )
+
+    private fun stateLabel(state: RunState): String = when (state) {
+        RunState.IDLE -> "空闲"
+        RunState.ARMED -> "等待触发"
+        RunState.STAGE_1_RESERVE -> "阶段一：立即预定"
+        RunState.STAGE_2_CONFIRM_PRICE -> "阶段二：确定票价"
+        RunState.STAGE_3_SUBMIT -> "阶段三：立即提交"
+        RunState.DONE_PENDING_RESULT -> "已提交，等待结果确认"
+        RunState.DONE -> "流程完成"
+        RunState.FAILED -> "运行失败"
+        RunState.CANCELLED -> "已取消"
+    }
+
+    private fun categoryLabel(category: String): String = when (category) {
+        "state" -> "状态"
+        "calibration" -> "校准"
+        else -> category
+    }
+
+    private fun messageLabel(message: String): String = when {
+        message.isBlank() -> ""
+        message == "Waiting for trigger" -> "已进入待命，等待目标时间"
+        message == "Stage 1 coordinate click requested" -> "已请求阶段一坐标点击"
+        message == "Stage 1 coordinate retry requested" -> "正在重试阶段一坐标点击"
+        message == "Node click sent; waiting for next stage" -> "节点点击已发送，等待页面进入下一阶段"
+        message == "Node click failed; coordinate fallback requested" ->
+            "节点点击失败，已请求坐标点击兜底"
+        message == "Visual fallback requested" -> "正在执行截图模板匹配兜底"
+        message == "Visual fallback did not match" -> "截图模板未匹配，准备重试节点"
+        message == "Visual match coordinate click requested" -> "模板匹配成功，已请求坐标点击"
+        message == "Submit click limit reached; result requires confirmation" ->
+            "已达到提交点击上限，等待成功结果文字确认"
+        message == "Configured result feature observed" -> "检测到配置的成功结果文字"
+        message == "Automation cancelled" -> "自动化流程已取消"
+        message == "Damai is no longer foreground" -> "大麦已离开前台，流程自动取消"
+        message == "Stage timed out" -> "当前阶段已超时"
+        message == "Stage click limit reached" -> "当前阶段已达到点击次数上限"
+        message.startsWith("STAGE_2 node click requested") -> "已请求点击“确定票价”节点"
+        message.startsWith("STAGE_3 node click requested") -> "已请求点击“立即提交”节点"
+        message.startsWith("STAGE_2 node retry requested") -> "正在重试“确定票价”节点"
+        message.startsWith("STAGE_3 node retry requested") -> "正在重试“立即提交”节点"
+        message.startsWith("Captured calibration image for ") -> "阶段截图已采集"
+        else -> message
+    }
 
     private fun showMessage(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()

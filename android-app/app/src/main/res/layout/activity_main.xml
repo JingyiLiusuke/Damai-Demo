@@ -11,9 +11,21 @@
         android:padding="16dp">
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Target time (yyyy-MM-dd HH:mm:ss.SSS)" />
+            android:paddingBottom="12dp"
+            android:text="@string/usage_summary" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/section_time"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/target_time_label" />
 
         <EditText
             android:id="@+id/target_time_input"
@@ -25,14 +37,27 @@
             android:id="@+id/pre_trigger_offset_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Pre-trigger offset (ms)"
+            android:hint="@string/pre_trigger_offset_hint"
             android:inputType="number" />
 
         <Switch
             android:id="@+id/test_now_switch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Test now (trigger after 500 ms)" />
+            android:text="@string/test_now_label" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="@string/section_regions"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="6dp"
+            android:text="@string/regions_help" />
 
         <TextView
             android:id="@+id/stage1_rect_summary"
@@ -49,20 +74,34 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="@string/section_detection"
+            android:textStyle="bold" />
+
         <Switch
             android:id="@+id/visual_fallback_switch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Enable visual fallback" />
+            android:text="@string/visual_fallback_label" />
 
         <EditText
             android:id="@+id/result_text_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="top"
-            android:hint="Result texts, one per line"
+            android:hint="@string/result_text_hint"
             android:inputType="textMultiLine"
             android:minLines="3" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="@string/section_status"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/accessibility_status"
@@ -80,40 +119,54 @@
             android:layout_height="wrap_content"
             android:minLines="2" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="@string/section_actions"
+            android:textStyle="bold" />
+
         <Button
             android:id="@+id/open_accessibility_settings_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Open accessibility settings" />
+            android:text="@string/open_accessibility_settings" />
 
         <Button
             android:id="@+id/calibrate_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Calibrate stage" />
+            android:text="@string/calibrate_stage" />
 
         <Button
             android:id="@+id/arm_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Arm" />
+            android:text="@string/arm_automation" />
 
         <Button
             android:id="@+id/stop_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Stop" />
+            android:text="@string/stop_automation" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="@string/section_debug"
+            android:textStyle="bold" />
 
         <Button
             android:id="@+id/export_log_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Export run log" />
+            android:text="@string/export_run_log" />
 
         <Button
             android:id="@+id/debug_capture_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Capture debug screenshot" />
+            android:text="@string/capture_debug" />
     </LinearLayout>
 </ScrollView>
