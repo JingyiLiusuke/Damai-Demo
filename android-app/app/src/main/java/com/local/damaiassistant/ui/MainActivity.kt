@@ -5,6 +5,8 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Button
@@ -13,6 +15,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import com.local.damaiassistant.DamaiAssistantApp
+import com.local.damaiassistant.PendingCalibration
 import com.local.damaiassistant.R
 import com.local.damaiassistant.config.AutomationConfig
 import com.local.damaiassistant.config.ConfigRepository
@@ -23,6 +26,8 @@ import com.local.damaiassistant.domain.RuntimeSnapshot
 import com.local.damaiassistant.domain.Stage
 import java.time.Instant
 import java.time.ZoneId
+import java.io.File
+import java.io.FileOutputStream
 
 class MainActivity : Activity() {
     private lateinit var app: DamaiAssistantApp
@@ -39,6 +44,7 @@ class MainActivity : Activity() {
     private lateinit var stopButton: Button
     private lateinit var debugCaptureButton: Button
     private var snapshotSubscription: AutoCloseable? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,11 +62,28 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        val control = app.automationControl()
+        if (app.snapshot().state in ACTIVE_STATES) {
+            control?.stop()
+        }
         loadConfig()
         refreshConnectionStatus()
         snapshotSubscription?.close()
         snapshotSubscription = app.addSnapshotListener { snapshot ->
             runOnUiThread { renderSnapshot(snapshot) }
+        }
+        app.consumeCompletedExport()?.let { file ->
+            recentLog.text = file.absolutePath
+        }
+        app.consumePendingCalibration()?.let { pending ->
+            startActivity(
+                Intent(this, CalibrationActivity::class.java)
+                    .putExtra(CalibrationActivity.EXTRA_STAGE, pending.stage.name)
+                    .putExtra(
+                        CalibrationActivity.EXTRA_SCREENSHOT_PATH,
+                        pending.screenshot.absolutePath,
+                    ),
+            )
         }
     }
 
@@ -104,14 +127,7 @@ class MainActivity : Activity() {
             } ?: showMessage("Accessibility service is not connected")
         }
         debugCaptureButton.setOnClickListener {
-            app.automationControl()?.captureDebug { result ->
-                runOnUiThread {
-                    result.fold(
-                        onSuccess = { file -> recentLog.text = file.absolutePath },
-                        onFailure = { error -> showMessage(error.message ?: "Capture failed") },
-                    )
-                }
-            } ?: showMessage("Accessibility service is not connected")
+            beginDebugCapture()
         }
     }
 
@@ -178,9 +194,10 @@ class MainActivity : Activity() {
             visualFallbackEnabled = visualFallback.isChecked,
         )
         repository.save(config)
-        control.arm(config).onFailure { error ->
-            showMessage(error.message ?: "Unable to arm")
-        }
+        control.arm(config).fold(
+            onSuccess = { returnToDamai(control) },
+            onFailure = { error -> showMessage(error.message ?: "Unable to arm") },
+        )
     }
 
     private fun showStageChooser() {
@@ -188,12 +205,72 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Choose calibration stage")
             .setItems(arrayOf("Stage 1", "Stage 2", "Stage 3")) { _, index ->
-                startActivity(
-                    Intent(this, CalibrationActivity::class.java)
-                        .putExtra(CalibrationActivity.EXTRA_STAGE, stages[index].name),
-                )
+                beginCalibration(stages[index])
             }
             .show()
+    }
+
+    private fun beginCalibration(stage: Stage) {
+        val control = app.automationControl()
+            ?: return showMessage("Accessibility service is not connected")
+        showMessage("Switching to Damai for capture. Return here after the screenshot.")
+        if (!launchDamai()) return
+        mainHandler.postDelayed(
+            {
+                if (app.foregroundPackage() != DAMAI_PACKAGE) {
+                    return@postDelayed
+                }
+                control.captureCalibration(stage) { result ->
+                    result.onSuccess { bitmap ->
+                        val file = File(cacheDir, "pending-calibration-${stage.ordinal + 1}.png")
+                        val saved = runCatching {
+                            FileOutputStream(file).use { stream ->
+                                check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream))
+                            }
+                            app.setPendingCalibration(PendingCalibration(stage, file))
+                        }
+                        bitmap.recycle()
+                        if (saved.isFailure) file.delete()
+                    }
+                }
+            },
+            CAPTURE_DELAY_MILLIS,
+        )
+    }
+
+    private fun beginDebugCapture() {
+        val control = app.automationControl()
+            ?: return showMessage("Accessibility service is not connected")
+        showMessage("Switching to Damai for debug capture. Return here when complete.")
+        if (!launchDamai()) return
+        mainHandler.postDelayed(
+            {
+                if (app.foregroundPackage() != DAMAI_PACKAGE) {
+                    return@postDelayed
+                }
+                control.captureDebug { result ->
+                    result.onSuccess(app::setCompletedExport)
+                }
+            },
+            CAPTURE_DELAY_MILLIS,
+        )
+    }
+
+    private fun returnToDamai(control: com.local.damaiassistant.AutomationControl) {
+        if (!launchDamai()) {
+            control.stop()
+        }
+    }
+
+    private fun launchDamai(): Boolean {
+        val launchIntent = packageManager.getLaunchIntentForPackage(DAMAI_PACKAGE)
+        if (launchIntent == null) {
+            showMessage("Damai is not installed")
+            return false
+        }
+        launchIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        startActivity(launchIntent)
+        return true
     }
 
     private fun refreshConnectionStatus() {
@@ -235,6 +312,7 @@ class MainActivity : Activity() {
         const val DAMAI_PACKAGE = "cn.damai"
         const val DEFAULT_TARGET_DELAY_MILLIS = 5 * 60 * 1000L
         const val TEST_NOW_DELAY_MILLIS = 500L
+        const val CAPTURE_DELAY_MILLIS = 800L
         val ACTIVE_STATES = setOf(
             RunState.ARMED,
             RunState.STAGE_1_RESERVE,

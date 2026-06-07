@@ -10,6 +10,7 @@ class GestureController(
 ) {
     private val lock = Any()
     private var inFlightGeneration: Long? = null
+    private var pending: PendingGesture? = null
 
     fun click(
         point: PixelPoint,
@@ -17,11 +18,32 @@ class GestureController(
         callback: (Long, Boolean) -> Unit,
     ): Boolean {
         require(point.x >= 0 && point.y >= 0) { "Gesture coordinates must be nonnegative" }
-        synchronized(lock) {
-            if (inFlightGeneration != null) return false
-            inFlightGeneration = generation
+        val shouldDispatch = synchronized(lock) {
+            if (inFlightGeneration == null) {
+                inFlightGeneration = generation
+                true
+            } else {
+                if (pending != null) return false
+                pending = PendingGesture(point, generation, callback)
+                false
+            }
         }
+        if (!shouldDispatch) return true
+        dispatch(point, generation, callback)
+        return true
+    }
 
+    fun clearPending() {
+        synchronized(lock) {
+            pending = null
+        }
+    }
+
+    private fun dispatch(
+        point: PixelPoint,
+        generation: Long,
+        callback: (Long, Boolean) -> Unit,
+    ) {
         val path = Path().apply {
             moveTo(point.x.toFloat(), point.y.toFloat())
         }
@@ -46,7 +68,6 @@ class GestureController(
         if (!dispatched) {
             complete(generation, false, callback)
         }
-        return true
     }
 
     private fun complete(
@@ -54,16 +75,27 @@ class GestureController(
         succeeded: Boolean,
         callback: (Long, Boolean) -> Unit,
     ) {
+        var next: PendingGesture? = null
         val shouldNotify = synchronized(lock) {
             if (inFlightGeneration != generation) {
                 false
             } else {
                 inFlightGeneration = null
+                next = pending
+                pending = null
+                next?.let { inFlightGeneration = it.generation }
                 true
             }
         }
         if (shouldNotify) {
             callback(generation, succeeded)
+            next?.let { dispatch(it.point, it.generation, it.callback) }
         }
     }
+
+    private data class PendingGesture(
+        val point: PixelPoint,
+        val generation: Long,
+        val callback: (Long, Boolean) -> Unit,
+    )
 }

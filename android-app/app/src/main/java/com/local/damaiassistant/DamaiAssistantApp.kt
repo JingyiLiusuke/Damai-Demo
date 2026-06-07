@@ -10,6 +10,11 @@ import java.io.File
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.atomic.AtomicReference
 
+data class PendingCalibration(
+    val stage: Stage,
+    val screenshot: File,
+)
+
 interface AutomationControl {
     fun arm(config: AutomationConfig): Result<Unit>
 
@@ -30,6 +35,8 @@ class DamaiAssistantApp : Application() {
     private val control = AtomicReference<AutomationControl?>()
     private val latestSnapshot = AtomicReference(RuntimeSnapshot())
     private val latestForegroundPackage = AtomicReference<String?>()
+    private val pendingCalibration = AtomicReference<PendingCalibration?>()
+    private val completedExport = AtomicReference<File?>()
     private val snapshotListeners =
         CopyOnWriteArraySet<(RuntimeSnapshot) -> Unit>()
 
@@ -38,6 +45,19 @@ class DamaiAssistantApp : Application() {
     fun snapshot(): RuntimeSnapshot = latestSnapshot.get()
 
     fun foregroundPackage(): String? = latestForegroundPackage.get()
+
+    fun setPendingCalibration(value: PendingCalibration) {
+        pendingCalibration.getAndSet(value)?.screenshot?.delete()
+    }
+
+    fun consumePendingCalibration(): PendingCalibration? =
+        pendingCalibration.getAndSet(null)
+
+    fun setCompletedExport(file: File) {
+        completedExport.set(file)
+    }
+
+    fun consumeCompletedExport(): File? = completedExport.getAndSet(null)
 
     fun register(control: AutomationControl) {
         this.control.set(control)

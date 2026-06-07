@@ -61,10 +61,7 @@ class TicketStateMachine {
             }
         }
 
-        if (
-            input !is Input.FeatureObserved &&
-            snapshot.hasTimedOut(config, now)
-        ) {
+        if (snapshot.hasTimedOut(config, now)) {
             return fail(snapshot, "Stage timed out")
         }
 

@@ -276,6 +276,21 @@ class TicketStateMachineTest {
     }
 
     @Test
+    fun featureObservedAfterTimeoutCannotAdvanceStage() {
+        val snapshot = stage1Snapshot(enteredAtNanos = 100L)
+        val now = 100L + config.stage1.timeoutMillis * 1_000_000L
+
+        val transition = machine.reduce(
+            snapshot,
+            Input.FeatureObserved(Stage.STAGE_2),
+            config,
+            now,
+        )
+
+        assertEquals(RunState.FAILED, transition.snapshot.state)
+    }
+
+    @Test
     fun lateNodeCallbackCannotStartAnotherFallbackClick() {
         val snapshot = stage2Snapshot(
             generation = 7,

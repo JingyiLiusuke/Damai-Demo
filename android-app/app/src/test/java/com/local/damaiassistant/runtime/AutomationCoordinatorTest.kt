@@ -108,6 +108,42 @@ class AutomationCoordinatorTest {
         assertEquals(config.stage2Rect, gestures.bounds)
     }
 
+    @Test
+    fun rearmDoesNotReuseGenerationFromPreviousRun() {
+        coordinator.arm(config)
+        executor.runAll()
+        scheduler.fireTrigger()
+        executor.runAll()
+        val staleCallback = gestures.callback
+        val firstGeneration = coordinator.snapshot().generation
+
+        coordinator.stop()
+        executor.runAll()
+        coordinator.arm(config)
+        executor.runAll()
+        scheduler.fireTrigger()
+        executor.runAll()
+
+        assertTrue(coordinator.snapshot().generation > firstGeneration)
+        staleCallback?.invoke(true)
+        executor.runAll()
+        assertTrue(coordinator.snapshot().gestureInFlight)
+    }
+
+    @Test
+    fun stageTimeoutIsScheduledEvenWhenGestureNeverCallsBack() {
+        coordinator.arm(config)
+        executor.runAll()
+        scheduler.fireTrigger()
+        executor.runAll()
+
+        scheduler.fireDelay(config.stage1.timeoutMillis)
+        clock.elapsedNanos += config.stage1.timeoutMillis * 1_000_000L
+        executor.runAll()
+
+        assertEquals(RunState.FAILED, coordinator.snapshot().state)
+    }
+
     private class QueuedExecutor : Executor {
         private val tasks = ArrayDeque<Runnable>()
 
@@ -136,6 +172,7 @@ class AutomationCoordinatorTest {
         var trigger: (() -> Unit)? = null
         var cancelCount = 0
         val delays = mutableListOf<Long>()
+        val delayCallbacks = mutableListOf<Pair<Long, () -> Unit>>()
 
         override fun scheduleTrigger(deadlineNanos: Long, callback: () -> Unit) {
             lastDeadline = deadlineNanos
@@ -144,6 +181,7 @@ class AutomationCoordinatorTest {
 
         override fun scheduleAfter(delayMillis: Long, callback: () -> Unit) {
             delays += delayMillis
+            delayCallbacks += delayMillis to callback
         }
 
         override fun cancelAll() {
@@ -155,6 +193,13 @@ class AutomationCoordinatorTest {
             val current = trigger
             trigger = null
             current?.invoke()
+        }
+
+        fun fireDelay(delayMillis: Long) {
+            val index = delayCallbacks.indexOfFirst { it.first == delayMillis }
+            if (index >= 0) {
+                delayCallbacks.removeAt(index).second.invoke()
+            }
         }
     }
 
@@ -187,6 +232,7 @@ class AutomationCoordinatorTest {
         var bounds: NormalizedRect? = null
         var point: PixelPoint? = null
         var callback: ((Boolean) -> Unit)? = null
+        var clearPendingCount = 0
 
         override fun click(
             stage: Stage,
@@ -199,6 +245,10 @@ class AutomationCoordinatorTest {
             this.point = point
             this.callback = callback
             return true
+        }
+
+        override fun clearPending() {
+            clearPendingCount += 1
         }
     }
 

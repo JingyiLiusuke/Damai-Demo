@@ -13,6 +13,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ScreenshotController(
     private val service: AccessibilityService,
@@ -23,6 +24,7 @@ class ScreenshotController(
     private val processingExecutor: ExecutorService = Executors.newSingleThreadExecutor(),
 ) : AutoCloseable {
     private val lock = Any()
+    private val closed = AtomicBoolean()
     private var captureInFlight = false
     private var lastCaptureStartedAtMillis: Long? = null
 
@@ -104,6 +106,7 @@ class ScreenshotController(
         val now = elapsedRealtimeMillis()
         require(now >= 0L) { "Elapsed realtime must be nonnegative" }
         synchronized(lock) {
+            if (closed.get()) return false
             if (captureInFlight) return false
             val previous = lastCaptureStartedAtMillis
             if (
@@ -210,8 +213,12 @@ class ScreenshotController(
     }
 
     private fun finishCapture() {
-        synchronized(lock) {
+        val shouldShutdown = synchronized(lock) {
             captureInFlight = false
+            closed.get()
+        }
+        if (shouldShutdown) {
+            shutdownExecutors()
         }
     }
 
@@ -219,8 +226,14 @@ class ScreenshotController(
         File(File(filesDir, TEMPLATE_DIRECTORY), "stage-${stage.number}.png")
 
     override fun close() {
-        callbackExecutor.shutdownNow()
-        processingExecutor.shutdownNow()
+        if (!closed.compareAndSet(false, true)) return
+        val shouldShutdown = synchronized(lock) { !captureInFlight }
+        if (shouldShutdown) shutdownExecutors()
+    }
+
+    private fun shutdownExecutors() {
+        callbackExecutor.shutdown()
+        processingExecutor.shutdown()
     }
 
     private data class CapturedRegion(

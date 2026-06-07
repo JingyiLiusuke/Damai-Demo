@@ -24,9 +24,12 @@ class DebugCaptureManager(
         timestampMillis: Long = System.currentTimeMillis(),
     ): Result<File> = runCatching {
         val workspace = File(cacheDir, "debug-capture-$timestampMillis")
-        check(workspace.mkdirs()) { "Unable to create debug capture workspace" }
+        var rootToRecycle = root
         try {
-            writeNodes(root, File(workspace, NODES_FILE))
+            check(workspace.mkdirs()) { "Unable to create debug capture workspace" }
+            val rootForNodes = rootToRecycle
+            rootToRecycle = null
+            writeNodes(rootForNodes, File(workspace, NODES_FILE))
             writeScreen(bitmap, File(workspace, SCREEN_FILE))
             File(workspace, CONFIG_FILE).writeText(
                 formatConfig(config),
@@ -45,8 +48,10 @@ class DebugCaptureManager(
                     zip.closeEntry()
                 }
             }
+            pruneExports(exportDirectory, output)
             output
         } finally {
+            recycle(rootToRecycle)
             bitmap.recycle()
             workspace.deleteRecursively()
         }
@@ -58,62 +63,69 @@ class DebugCaptureManager(
     ): Result<File> = runCatching {
         val output = File(exportDirectory(), "run-log-$timestampMillis.txt")
         writeLogs(logs, output)
+        pruneExports(output.parentFile ?: filesDir, output)
         output
     }
 
     @Suppress("DEPRECATION")
     private fun writeNodes(root: AccessibilityNodeInfo?, output: File) {
-        output.bufferedWriter(Charsets.UTF_8).use { writer ->
-            if (root == null) {
-                writer.appendLine("No active accessibility root")
-                return
-            }
-            val stack = ArrayDeque<NodeAtDepth>()
-            stack.addLast(NodeAtDepth(root, 0))
-            var visited = 0
-            val bounds = Rect()
-            try {
-                while (stack.isNotEmpty() && visited < MAX_NODES) {
-                    val current = stack.removeLast()
-                    val node = current.node
-                    try {
-                        visited += 1
-                        node.getBoundsInScreen(bounds)
-                        writer.append(current.depth.toString())
-                        writer.append(" | ")
-                        writer.append(node.className?.toString().orEmpty())
-                        writer.append(" | ")
-                        writer.append(node.viewIdResourceName.orEmpty())
-                        writer.append(" | ")
-                        writer.append(sanitizeNodeText(node.text?.toString().orEmpty()))
-                        writer.append(" | ")
-                        writer.append(
-                            sanitizeNodeText(
-                                node.contentDescription?.toString().orEmpty(),
-                            ),
-                        )
-                        writer.append(" | ")
-                        writer.append(node.isClickable.toString())
-                        writer.append(" | ")
-                        writer.append(bounds.toShortString())
-                        writer.newLine()
+        var rootToRecycle = root
+        try {
+            output.bufferedWriter(Charsets.UTF_8).use { writer ->
+                if (rootToRecycle == null) {
+                    writer.appendLine("No active accessibility root")
+                    return
+                }
+                val stack = ArrayDeque<NodeAtDepth>()
+                stack.addLast(NodeAtDepth(rootToRecycle, 0))
+                rootToRecycle = null
+                var visited = 0
+                val bounds = Rect()
+                try {
+                    while (stack.isNotEmpty() && visited < MAX_NODES) {
+                        val current = stack.removeLast()
+                        val node = current.node
+                        try {
+                            visited += 1
+                            node.getBoundsInScreen(bounds)
+                            writer.append(current.depth.toString())
+                            writer.append(" | ")
+                            writer.append(node.className?.toString().orEmpty())
+                            writer.append(" | ")
+                            writer.append(node.viewIdResourceName.orEmpty())
+                            writer.append(" | ")
+                            writer.append(sanitizeNodeText(node.text?.toString().orEmpty()))
+                            writer.append(" | ")
+                            writer.append(
+                                sanitizeNodeText(
+                                    node.contentDescription?.toString().orEmpty(),
+                                ),
+                            )
+                            writer.append(" | ")
+                            writer.append(node.isClickable.toString())
+                            writer.append(" | ")
+                            writer.append(bounds.toShortString())
+                            writer.newLine()
 
-                        if (current.depth < MAX_DEPTH) {
-                            for (index in node.childCount - 1 downTo 0) {
-                                node.getChild(index)?.let { child ->
-                                    stack.addLast(NodeAtDepth(child, current.depth + 1))
+                            if (current.depth < MAX_DEPTH) {
+                                for (index in node.childCount - 1 downTo 0) {
+                                    node.getChild(index)?.let { child ->
+                                        stack.addLast(NodeAtDepth(child, current.depth + 1))
+                                    }
                                 }
                             }
+                        } finally {
+                            node.recycle()
                         }
-                    } finally {
-                        node.recycle()
+                    }
+                } finally {
+                    while (stack.isNotEmpty()) {
+                        stack.removeLast().node.recycle()
                     }
                 }
-            } finally {
-                while (stack.isNotEmpty()) {
-                    stack.removeLast().node.recycle()
-                }
             }
+        } finally {
+            recycle(rootToRecycle)
         }
     }
 
@@ -144,6 +156,20 @@ class DebugCaptureManager(
         check(it.exists() || it.mkdirs()) { "Unable to create export directory" }
     }
 
+    private fun pruneExports(directory: File, keep: File) {
+        directory.listFiles()
+            .orEmpty()
+            .filter { it.isFile && it != keep }
+            .sortedByDescending(File::lastModified)
+            .drop(MAX_RETAINED_EXPORTS - 1)
+            .forEach(File::delete)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun recycle(node: AccessibilityNodeInfo?) {
+        node?.recycle()
+    }
+
     private data class NodeAtDepth(
         val node: AccessibilityNodeInfo,
         val depth: Int,
@@ -172,6 +198,7 @@ class DebugCaptureManager(
         private const val MAX_NODES = 500
         private const val MAX_DEPTH = 30
         private const val MAX_TEXT_LENGTH = 80
+        private const val MAX_RETAINED_EXPORTS = 5
         private const val EXPORT_DIRECTORY = "exports"
         private const val NODES_FILE = "nodes.txt"
         private const val SCREEN_FILE = "screen.png"

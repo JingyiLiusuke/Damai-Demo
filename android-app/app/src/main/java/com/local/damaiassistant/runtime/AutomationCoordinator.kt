@@ -44,6 +44,8 @@ interface GestureGateway {
         point: PixelPoint?,
         callback: (Boolean) -> Unit,
     ): Boolean
+
+    fun clearPending() = Unit
 }
 
 interface VisualGateway {
@@ -74,7 +76,9 @@ class AutomationCoordinator(
         executor.execute {
             scheduler.cancelAll()
             currentConfig = config
-            currentSnapshot = RuntimeSnapshot()
+            currentSnapshot = RuntimeSnapshot(
+                generation = currentSnapshot.generation + 1L,
+            )
             process(Input.Arm)
             try {
                 val deadline = TriggerDeadline.compute(
@@ -118,6 +122,7 @@ class AutomationCoordinator(
 
     private fun process(input: Input) {
         val config = currentConfig ?: return
+        val previous = currentSnapshot
         val transition = machine.reduce(
             snapshot = currentSnapshot,
             input = input,
@@ -134,6 +139,27 @@ class AutomationCoordinator(
             clock.elapsedNanos(),
         )
         transition.effects.forEach { execute(it, config) }
+        if (
+            transition.snapshot.generation != previous.generation &&
+            transition.snapshot.state.isTimedStage()
+        ) {
+            scheduleStageTimeout(transition.snapshot, config)
+        }
+    }
+
+    private fun scheduleStageTimeout(
+        snapshot: RuntimeSnapshot,
+        config: AutomationConfig,
+    ) {
+        val delay = when (snapshot.state) {
+            RunState.STAGE_1_RESERVE -> config.stage1.timeoutMillis
+            RunState.STAGE_2_CONFIRM_PRICE -> config.stage2.timeoutMillis
+            RunState.STAGE_3_SUBMIT -> config.stage3.timeoutMillis
+            else -> return
+        }
+        scheduler.scheduleAfter(delay) {
+            postIfCurrent(snapshot.generation, Input.Tick)
+        }
     }
 
     private fun execute(effect: Effect, config: AutomationConfig) {
@@ -156,7 +182,10 @@ class AutomationCoordinator(
             is Effect.ClickNode -> clickNode(effect.stage)
             is Effect.ClickCoordinate -> clickCoordinate(effect, config)
             is Effect.CaptureAndMatch -> captureAndMatch(effect.stage, config)
-            Effect.CancelPendingWork -> scheduler.cancelAll()
+            Effect.CancelPendingWork -> {
+                scheduler.cancelAll()
+                gestures.clearPending()
+            }
             is Effect.Publish -> publish(effect.snapshot)
         }
     }
@@ -262,6 +291,11 @@ class AutomationCoordinator(
 
         else -> null
     }
+
+    private fun RunState.isTimedStage(): Boolean =
+        this == RunState.STAGE_1_RESERVE ||
+            this == RunState.STAGE_2_CONFIRM_PRICE ||
+            this == RunState.STAGE_3_SUBMIT
 
     private fun AutomationConfig.boundsFor(stage: Stage): NormalizedRect = when (stage) {
         Stage.STAGE_1 -> stage1Rect

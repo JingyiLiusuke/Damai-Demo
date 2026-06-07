@@ -1,7 +1,6 @@
 package com.local.damaiassistant.runtime
 
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.LockSupport
 import kotlin.math.min
@@ -18,19 +17,13 @@ class TriggerScheduler(
     private val nanoTime: () -> Long = System::nanoTime,
 ) : AutomationScheduler, AutoCloseable {
     private val token = AtomicLong()
-    @Volatile
-    private var workerThread: Thread? = null
-    private val executor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, THREAD_NAME).apply {
-            isDaemon = true
-            workerThread = this
-        }
-    }
+    private val threads = ConcurrentHashMap.newKeySet<Thread>()
 
     override fun scheduleTrigger(deadlineNanos: Long, callback: () -> Unit) {
         require(deadlineNanos >= 0L) { "Trigger deadline must be nonnegative" }
         val expectedToken = token.incrementAndGet()
-        executor.execute {
+        interruptWorkers()
+        launch("trigger") {
             waitUntil(deadlineNanos, expectedToken)
             if (token.get() == expectedToken) callback()
         }
@@ -43,7 +36,7 @@ class TriggerScheduler(
             nanoTime(),
             saturatingMultiply(delayMillis, NANOS_PER_MILLISECOND),
         )
-        executor.execute {
+        launch("delay") {
             waitUntil(deadline, expectedToken)
             if (token.get() == expectedToken) callback()
         }
@@ -51,7 +44,27 @@ class TriggerScheduler(
 
     override fun cancelAll() {
         token.incrementAndGet()
-        workerThread?.interrupt()
+        interruptWorkers()
+    }
+
+    private fun launch(kind: String, block: () -> Unit) {
+        lateinit var thread: Thread
+        thread = Thread(
+            {
+                try {
+                    block()
+                } finally {
+                    threads.remove(thread)
+                }
+            },
+            "$THREAD_NAME-$kind",
+        ).apply { isDaemon = true }
+        threads += thread
+        thread.start()
+    }
+
+    private fun interruptWorkers() {
+        threads.forEach(Thread::interrupt)
     }
 
     private fun waitUntil(deadlineNanos: Long, expectedToken: Long) {
@@ -75,7 +88,6 @@ class TriggerScheduler(
 
     override fun close() {
         cancelAll()
-        executor.shutdownNow()
     }
 
     private fun saturatingMultiply(left: Long, right: Long): Long =

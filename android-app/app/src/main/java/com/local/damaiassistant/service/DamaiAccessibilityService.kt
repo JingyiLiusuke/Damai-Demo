@@ -42,6 +42,7 @@ class DamaiAccessibilityService : AccessibilityService() {
     private lateinit var runtimeHandler: Handler
     private lateinit var scheduler: TriggerScheduler
     private lateinit var screenshots: ScreenshotController
+    private lateinit var gestureController: GestureController
     private lateinit var coordinator: AutomationCoordinator
     private lateinit var control: ServiceAutomationControl
     private lateinit var debugCaptureManager: DebugCaptureManager
@@ -51,9 +52,7 @@ class DamaiAccessibilityService : AccessibilityService() {
         closed.set(false)
         app = application as DamaiAssistantApp
 
-        serviceInfo = serviceInfo.apply {
-            packageNames = arrayOf(DAMAI_PACKAGE)
-        }
+        serviceInfo = serviceInfo.apply { packageNames = null }
 
         runtimeThread = HandlerThread(RUNTIME_THREAD_NAME).apply { start() }
         runtimeHandler = Handler(runtimeThread.looper)
@@ -72,7 +71,7 @@ class DamaiAccessibilityService : AccessibilityService() {
         )
         val initialConfig = repository.load()
         val detector = NodeDetector()
-        val gestureController = GestureController(this)
+        gestureController = GestureController(this)
         scheduler = TriggerScheduler()
         screenshots = ScreenshotController(
             service = this,
@@ -98,16 +97,30 @@ class DamaiAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || closed.get()) return
-        val packageName = event.packageName?.toString()
+        val eventPackage = event.packageName?.toString()
         val eventType = event.eventType
-        if (packageName != DAMAI_PACKAGE || eventType !in OBSERVED_EVENT_TYPES) return
+        if (eventType !in OBSERVED_EVENT_TYPES) return
 
-        app.updateForegroundPackage(packageName)
-        coordinator.onWindowChanged(packageName)
+        when {
+            eventPackage == DAMAI_PACKAGE -> {
+                app.updateForegroundPackage(eventPackage)
+                coordinator.onWindowChanged(eventPackage)
+            }
+
+            eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+                eventPackage != this.packageName -> {
+                app.updateForegroundPackage(eventPackage)
+                coordinator.onWindowChanged(eventPackage)
+            }
+        }
     }
 
     override fun onInterrupt() {
-        shutdownRuntime()
+        if (!closed.get() && ::coordinator.isInitialized) {
+            gestureController.clearPending()
+            scheduler.cancelAll()
+            coordinator.stop()
+        }
     }
 
     override fun onDestroy() {
@@ -119,7 +132,9 @@ class DamaiAccessibilityService : AccessibilityService() {
         if (!closed.compareAndSet(false, true) || !::runtimeHandler.isInitialized) return
         app.updateForegroundPackage(null)
         app.unregister(control)
-        runtimeHandler.post {
+        gestureController.clearPending()
+        scheduler.cancelAll()
+        runtimeHandler.postAtFrontOfQueue {
             coordinator.serviceDisconnected()
             screenshots.close()
             scheduler.close()
@@ -149,6 +164,10 @@ class DamaiAccessibilityService : AccessibilityService() {
                 callback(Result.failure(IllegalStateException("Service is disconnected")))
                 return
             }
+            if (!isDamaiActiveWindow()) {
+                callback(Result.failure(IllegalStateException("Damai is not the active window")))
+                return
+            }
             val accepted = screenshots.capture(FULL_SCREEN) { result ->
                 logger.record(
                     category = "calibration",
@@ -170,6 +189,10 @@ class DamaiAccessibilityService : AccessibilityService() {
         override fun captureDebug(callback: (Result<File>) -> Unit) {
             if (closed.get()) {
                 callback(Result.failure(IllegalStateException("Service is disconnected")))
+                return
+            }
+            if (!isDamaiActiveWindow()) {
+                callback(Result.failure(IllegalStateException("Damai is not the active window")))
                 return
             }
             val accepted = screenshots.capture(FULL_SCREEN) { captureResult ->
@@ -240,6 +263,7 @@ class DamaiAccessibilityService : AccessibilityService() {
         } ?: WindowObservation()
 
         override fun click(stage: Stage, callback: (Boolean) -> Unit): Boolean {
+            if (closed.get()) return false
             val text = when (stage) {
                 Stage.STAGE_1 -> return false
                 Stage.STAGE_2 -> CONFIRM_PRICE_TEXT
@@ -306,6 +330,7 @@ class DamaiAccessibilityService : AccessibilityService() {
             point: PixelPoint?,
             callback: (Boolean) -> Unit,
         ): Boolean {
+            if (closed.get()) return false
             val target = point ?: bounds.toPixels(
                 screenWidth(),
                 screenHeight(),
@@ -314,9 +339,13 @@ class DamaiAccessibilityService : AccessibilityService() {
                 callback(succeeded)
             }
         }
+
+        override fun clearPending() {
+            gestures.clearPending()
+        }
     }
 
-    private class AccessibilityVisualGateway(
+    private inner class AccessibilityVisualGateway(
         private val screenshots: ScreenshotController,
     ) : VisualGateway {
         override fun captureAndMatch(
@@ -324,7 +353,10 @@ class DamaiAccessibilityService : AccessibilityService() {
             bounds: NormalizedRect,
             threshold: Float,
             callback: (Result<PixelPoint?>) -> Unit,
-        ): Boolean = screenshots.captureAndMatch(stage, bounds, threshold, callback)
+        ): Boolean {
+            if (closed.get()) return false
+            return screenshots.captureAndMatch(stage, bounds, threshold, callback)
+        }
     }
 
     private fun screenWidth(): Int =
@@ -332,6 +364,15 @@ class DamaiAccessibilityService : AccessibilityService() {
 
     private fun screenHeight(): Int =
         getSystemService(WindowManager::class.java).currentWindowMetrics.bounds.height()
+
+    private fun isDamaiActiveWindow(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        return try {
+            root.packageName?.toString() == DAMAI_PACKAGE
+        } finally {
+            recycle(root)
+        }
+    }
 
     @Suppress("DEPRECATION")
     private fun recycle(node: AccessibilityNodeInfo?) {

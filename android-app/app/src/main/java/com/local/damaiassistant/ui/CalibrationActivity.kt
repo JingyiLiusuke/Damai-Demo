@@ -3,11 +3,11 @@ package com.local.damaiassistant.ui
 import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
-import com.local.damaiassistant.DamaiAssistantApp
 import com.local.damaiassistant.R
 import com.local.damaiassistant.config.AutomationConfig
 import com.local.damaiassistant.config.ConfigRepository
@@ -25,12 +25,17 @@ class CalibrationActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val screenshotFile = intent.getStringExtra(EXTRA_SCREENSHOT_PATH)?.let(::File)
         stage = intent.getStringExtra(EXTRA_STAGE)
             ?.let { runCatching { Stage.valueOf(it) }.getOrNull() }
             ?: run {
                 finish()
                 return
             }
+        if (screenshotFile == null || !screenshotFile.isFile) {
+            finish()
+            return
+        }
         setContentView(R.layout.activity_calibration)
         title = "Calibrate $stage"
         repository = ConfigRepository(
@@ -46,7 +51,7 @@ class CalibrationActivity : Activity() {
         findViewById<Button>(R.id.cancel_calibration_button).setOnClickListener {
             finish()
         }
-        capture()
+        loadScreenshot(screenshotFile)
     }
 
     override fun onDestroy() {
@@ -56,33 +61,17 @@ class CalibrationActivity : Activity() {
         super.onDestroy()
     }
 
-    private fun capture() {
-        val control = (application as DamaiAssistantApp).automationControl()
-        if (control == null) {
-            status.text = "Accessibility service is not connected"
+    private fun loadScreenshot(file: File) {
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+        file.delete()
+        if (bitmap == null) {
+            status.text = "Unable to decode calibration screenshot"
             return
         }
-        status.text = "Capturing..."
-        control.captureCalibration(stage) { result ->
-            runOnUiThread {
-                if (isFinishing || isDestroyed) {
-                    result.getOrNull()?.recycle()
-                    return@runOnUiThread
-                }
-                result.fold(
-                    onSuccess = { bitmap ->
-                        screenshot?.recycle()
-                        screenshot = bitmap
-                        selectionView.setBitmap(bitmap)
-                        selectionView.setSelection(repository.load().rectFor(stage))
-                        status.text = "Drag to select; drag inside to move; drag corners to resize"
-                    },
-                    onFailure = { error ->
-                        status.text = error.message ?: "Screenshot failed"
-                    },
-                )
-            }
-        }
+        screenshot = bitmap
+        selectionView.setBitmap(bitmap)
+        selectionView.setSelection(repository.load().rectFor(stage))
+        status.text = "Drag to select; drag inside to move; drag corners to resize"
     }
 
     private fun saveCalibration() {
@@ -151,6 +140,7 @@ class CalibrationActivity : Activity() {
 
     companion object {
         const val EXTRA_STAGE = "stage"
+        const val EXTRA_SCREENSHOT_PATH = "screenshot_path"
         private const val CONFIG_PREFERENCES = "automation_config"
         private const val TEMPLATE_DIRECTORY = "templates"
     }
