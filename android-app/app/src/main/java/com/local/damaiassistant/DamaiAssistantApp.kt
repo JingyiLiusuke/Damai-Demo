@@ -20,6 +20,8 @@ interface AutomationControl {
 
     fun stop()
 
+    fun isDamaiActiveWindow(): Boolean
+
     fun captureCalibration(stage: Stage, callback: (Result<Bitmap>) -> Unit)
 
     fun captureDebug(callback: (Result<File>) -> Unit)

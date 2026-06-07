@@ -156,6 +156,9 @@ class DamaiAccessibilityService : AccessibilityService() {
             if (!closed.get()) coordinator.stop()
         }
 
+        override fun isDamaiActiveWindow(): Boolean =
+            !closed.get() && this@DamaiAccessibilityService.isDamaiActiveWindow()
+
         override fun captureCalibration(
             stage: Stage,
             callback: (Result<Bitmap>) -> Unit,
@@ -169,13 +172,26 @@ class DamaiAccessibilityService : AccessibilityService() {
                 return
             }
             val accepted = screenshots.capture(FULL_SCREEN) { result ->
+                val verifiedResult = result.fold(
+                    onSuccess = { bitmap ->
+                        if (isDamaiActiveWindow()) {
+                            Result.success(bitmap)
+                        } else {
+                            bitmap.recycle()
+                            Result.failure(
+                                IllegalStateException("Damai left foreground during capture"),
+                            )
+                        }
+                    },
+                    onFailure = Result.Companion::failure,
+                )
                 logger.record(
                     category = "calibration",
                     message = "Captured calibration image for $stage",
                     wallMillis = System.currentTimeMillis(),
                     elapsedNanos = System.nanoTime(),
                 )
-                callback(result)
+                callback(verifiedResult)
             }
             if (!accepted) {
                 callback(
@@ -198,11 +214,23 @@ class DamaiAccessibilityService : AccessibilityService() {
             val accepted = screenshots.capture(FULL_SCREEN) { captureResult ->
                 captureResult.fold(
                     onSuccess = { bitmap ->
+                        val root = damaiRootInActiveWindow()
+                        if (root == null) {
+                            bitmap.recycle()
+                            callback(
+                                Result.failure(
+                                    IllegalStateException(
+                                        "Damai left foreground during debug capture",
+                                    ),
+                                ),
+                            )
+                            return@fold
+                        }
                         val posted = runtimeHandler.post {
                             callback(
                                 debugCaptureManager.createBundle(
                                     bitmap = bitmap,
-                                    root = rootInActiveWindow,
+                                    root = root,
                                     config = repository.load(),
                                     logs = logger.snapshot(),
                                 ),
@@ -210,6 +238,7 @@ class DamaiAccessibilityService : AccessibilityService() {
                         }
                         if (!posted) {
                             bitmap.recycle()
+                            recycle(root)
                             callback(
                                 Result.failure(
                                     IllegalStateException("Automation thread is closed"),
@@ -244,7 +273,7 @@ class DamaiAccessibilityService : AccessibilityService() {
         override fun inspect(
             stage: Stage,
             resultTexts: List<String>,
-        ): WindowObservation = withRoot { root ->
+        ): WindowObservation = withDamaiRoot { root ->
             when (stage) {
                 Stage.STAGE_1 -> WindowObservation(
                     buyButtonVisible = hasViewId(root, BUY_BUTTON_ID),
@@ -263,16 +292,17 @@ class DamaiAccessibilityService : AccessibilityService() {
         } ?: WindowObservation()
 
         override fun click(stage: Stage, callback: (Boolean) -> Unit): Boolean {
-            if (closed.get()) return false
+            if (closed.get() || !isDamaiActiveWindow()) return false
             val text = when (stage) {
                 Stage.STAGE_1 -> return false
                 Stage.STAGE_2 -> CONFIRM_PRICE_TEXT
                 Stage.STAGE_3 -> SUBMIT_TEXT
             }
-            val clicked = withRoot { root ->
-                val target = detector.byExactText(root, text) ?: return@withRoot false
+            val clicked = withDamaiRoot { root ->
+                val target = detector.byExactText(root, text) ?: return@withDamaiRoot false
                 try {
-                    val clickable = detector.clickableNode(target) ?: return@withRoot false
+                    val clickable =
+                        detector.clickableNode(target) ?: return@withDamaiRoot false
                     try {
                         clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                     } finally {
@@ -307,10 +337,10 @@ class DamaiAccessibilityService : AccessibilityService() {
             return found
         }
 
-        private inline fun <T> withRoot(
+        private inline fun <T> withDamaiRoot(
             block: (AccessibilityNodeInfo) -> T,
         ): T? {
-            val root = rootInActiveWindow ?: return null
+            val root = damaiRootInActiveWindow() ?: return null
             return try {
                 block(root)
             } finally {
@@ -330,7 +360,7 @@ class DamaiAccessibilityService : AccessibilityService() {
             point: PixelPoint?,
             callback: (Boolean) -> Unit,
         ): Boolean {
-            if (closed.get()) return false
+            if (closed.get() || !isDamaiActiveWindow()) return false
             val target = point ?: bounds.toPixels(
                 screenWidth(),
                 screenHeight(),
@@ -354,8 +384,20 @@ class DamaiAccessibilityService : AccessibilityService() {
             threshold: Float,
             callback: (Result<PixelPoint?>) -> Unit,
         ): Boolean {
-            if (closed.get()) return false
-            return screenshots.captureAndMatch(stage, bounds, threshold, callback)
+            if (closed.get() || !isDamaiActiveWindow()) return false
+            return screenshots.captureAndMatch(stage, bounds, threshold) { result ->
+                if (isDamaiActiveWindow()) {
+                    callback(result)
+                } else {
+                    callback(
+                        Result.failure(
+                            IllegalStateException(
+                                "Damai left foreground during visual capture",
+                            ),
+                        ),
+                    )
+                }
+            }
         }
     }
 
@@ -366,12 +408,16 @@ class DamaiAccessibilityService : AccessibilityService() {
         getSystemService(WindowManager::class.java).currentWindowMetrics.bounds.height()
 
     private fun isDamaiActiveWindow(): Boolean {
-        val root = rootInActiveWindow ?: return false
-        return try {
-            root.packageName?.toString() == DAMAI_PACKAGE
-        } finally {
-            recycle(root)
-        }
+        val root = damaiRootInActiveWindow() ?: return false
+        recycle(root)
+        return true
+    }
+
+    private fun damaiRootInActiveWindow(): AccessibilityNodeInfo? {
+        val root = rootInActiveWindow ?: return null
+        if (root.packageName?.toString() == DAMAI_PACKAGE) return root
+        recycle(root)
+        return null
     }
 
     @Suppress("DEPRECATION")

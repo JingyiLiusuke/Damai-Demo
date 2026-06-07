@@ -1,30 +1,36 @@
-# Android 真机校准与延迟记录
+# Android 真机校准与验证记录
 
-## 当前状态
+## 当前基线
 
 - 记录日期：2026-06-07
 - 应用包名：`com.local.damaiassistant`
-- 目标设备：Android 12 真机
-- 当前 ADB 状态：未连接设备
-- Appium：校准时仅允许只读检查节点，不与 APK 同时执行点击
-
-本文件中的真机延迟数据尚未采集。没有设备数据前，不调整默认重试间隔。
-
-## 本机构建基线
-
+- 真机：华为 NOH-AN00，Android 12 / API 31
 - JDK：Temurin 17.0.19+10
-- Android API：36
+- 编译 API：36
 - Build Tools：36.0.0
 - Platform Tools：37.0.0
-- JVM 测试：67 个，0 失败
+- JVM 测试：70 个，0 失败
+- 真机仪器测试：3 个，0 失败
 - Debug APK：`android-app/app/build/outputs/apk/debug/app-debug.apk`
-- Release APK：`android-app/app/build/outputs/apk/release/app-release-unsigned.apk`
 
 Debug APK SHA-256：
 
 ```text
-C16ED8D0C169CC4F278D712871D7A204166283FC4FBE5CADAFA3CD81BA8C33E8
+D42EBF2618E1B31F7D287A18263C0FA84E3494899EEEEDCB3EE7D556DC040E8D
 ```
+
+## 使用边界
+
+大麦应用及目标页面由用户手动打开。助手不会自动启动或重新导航大麦，以免破坏已进入的项目详情页。
+
+助手只负责：
+
+1. 通过无障碍服务确认当前活动窗口属于 `cn.damai`。
+2. 运行三阶段混合状态机。
+3. 执行节点点击、标定坐标点击和视觉兜底。
+4. 导出截图、节点树、配置和运行日志。
+
+节点检查、节点点击、坐标手势和视觉截图执行前都会重新校验活动窗口。窗口不属于大麦时不会发送动作。
 
 ## 安装与启用
 
@@ -33,54 +39,38 @@ adb install -r android-app/app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n com.local.damaiassistant/.ui.MainActivity
 ```
 
-手动开启 `Damai Assistant Automation` 无障碍服务。主页面必须显示服务已连接，
-并且最近前台包为 `cn.damai`，才允许进入待命状态。
+安装或仪器测试后，华为系统可能关闭无障碍权限。需手动开启“大麦自动化助手”，并确认主页显示“无障碍服务：已连接”。
 
 ## 安全校准步骤
 
-1. 使用非开售或不会产生真实订单的页面路径。
-2. 手动进入对应阶段页面，不启动 Appium 点击。
-3. 返回助手选择对应校准阶段；助手会切回大麦并延迟截图。
-4. 截图完成后手动返回助手，框选页会自动打开。
-5. 每个矩形紧贴按钮，最小尺寸为源截图中的 20 x 20 像素。
-6. 保存后确认 `files/templates/stage-1.png` 至 `stage-3.png` 均存在。
-7. 调试采集同样会先切回大麦；完成后返回助手查看导出路径。
-8. 导出调试 ZIP，核对 `nodes.txt` 中的 ID 和文本。
-9. 只有三阶段识别均正确后，才进行非下单测试流程。
+1. 手动进入大麦对应阶段页面。
+2. 返回助手，点击“校准阶段区域”并选择阶段。
+3. 在 10 秒内手动切回原大麦页面。
+4. 助手确认页面稳定后自动截图，不会重新启动大麦。
+5. 截图完成后返回助手，框选对应按钮并保存。
+6. 对阶段一“立即购票”、阶段二“确定票价”、阶段三“立即提交”分别校准。
 
-## 确定性测试
+切换提示显示在助手页面内，不使用跨应用 Toast，避免污染校准截图和视觉模板。
+
+## 真机验证结果
+
+2026-06-07 已完成以下只读验证：
+
+- 无障碍服务成功绑定，活动窗口识别为 `cn.damai`。
+- 项目详情页识别为 `ProjectDetailActivity`。
+- 第一阶段页面的无障碍树可读取，节点资源 ID 为 `cn.damai:id/...`。
+- 页面底部“立即购票”未暴露为可点击无障碍节点，因此阶段一使用标定坐标点击。
+- 触发调试采集后，通过系统任务切换回原大麦任务，仍保持在同一项目详情页。
+- 调试 ZIP 成功生成，`screen.png` 与 `nodes.txt` 均来自同一大麦详情页。
+- 助手未点击“立即购票”，未进入下单流程。
+
+## 测试命令
 
 ```powershell
 cd android-app
-.\gradlew.bat :app:testDebugUnitTest `
-  --tests '*TicketStateMachineTest' `
-  --tests '*AutomationCoordinatorTest'
+.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+.\gradlew.bat :app:connectedDebugAndroidTest
 ```
-
-必须覆盖停止、服务断开、超时、点击上限、旧回调、前台包变化和结果确认。
-
-## 延迟采样
-
-每条路径至少记录 30 个样本，单位为毫秒。填写平均值、P95 和最大值。
-
-| 路径 | 样本数 | 平均 | P95 | 最大 |
-|---|---:|---:|---:|---:|
-| 触发截止时间 -> 调用 `dispatchGesture` | 待测 | 待测 | 待测 | 待测 |
-| `dispatchGesture` -> `onCompleted` | 待测 | 待测 | 待测 | 待测 |
-| 收到无障碍事件 -> 找到节点 | 待测 | 待测 | 待测 | 待测 |
-| 节点 `ACTION_CLICK` -> 下一阶段事件 | 待测 | 待测 | 待测 | 待测 |
-| 调用 `takeScreenshot` -> 收到 Bitmap | 待测 | 待测 | 待测 | 待测 |
-| 收到 Bitmap -> 生成视觉匹配分数 | 待测 | 待测 | 待测 | 待测 |
-
-仅当 P95 数据证明默认值过快或过慢时，才修改 `AutomationConfig`。
-
-## 独立运行确认
-
-1. 断开 USB。
-2. 关闭 Appium Server。
-3. 保持手机解锁、亮屏和大麦前台。
-4. 使用非下单测试路径启动待命。
-5. 确认流程不依赖任何 PC 进程。
 
 ## 调试文件导出
 
@@ -89,4 +79,17 @@ adb shell run-as com.local.damaiassistant ls files/exports
 adb exec-out run-as com.local.damaiassistant cat files/exports/<file> > capture.zip
 ```
 
+调试 ZIP 包含：
+
+- `screen.png`
+- `nodes.txt`
+- `config.txt`
+- `run-log.txt`
+
 导出目录属于应用私有存储，不需要网络或外部存储权限。
+
+## 待完成
+
+- 分别采集阶段二“确定票价”和阶段三“立即提交”的真实节点树。
+- 在不产生订单的测试路径中验证完整状态迁移。
+- 每条关键延迟路径至少采集 30 个样本，再依据 P95 调整重试间隔。

@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.widget.Button
 import android.widget.EditText
@@ -44,6 +45,8 @@ class MainActivity : Activity() {
     private lateinit var stopButton: Button
     private lateinit var debugCaptureButton: Button
     private var snapshotSubscription: AutoCloseable? = null
+    private var foregroundAwaitHandle: ForegroundAwaitHandle? = null
+    private var resumed = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,6 +65,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        resumed = true
         val control = app.automationControl()
         if (app.snapshot().state in ACTIVE_STATES) {
             control?.stop()
@@ -72,25 +76,20 @@ class MainActivity : Activity() {
         snapshotSubscription = app.addSnapshotListener { snapshot ->
             runOnUiThread { renderSnapshot(snapshot) }
         }
-        app.consumeCompletedExport()?.let { file ->
-            recentLog.text = file.absolutePath
-        }
-        app.consumePendingCalibration()?.let { pending ->
-            startActivity(
-                Intent(this, CalibrationActivity::class.java)
-                    .putExtra(CalibrationActivity.EXTRA_STAGE, pending.stage.name)
-                    .putExtra(
-                        CalibrationActivity.EXTRA_SCREENSHOT_PATH,
-                        pending.screenshot.absolutePath,
-                    ),
-            )
-        }
+        deliverCompletedWork()
     }
 
     override fun onPause() {
+        resumed = false
         snapshotSubscription?.close()
         snapshotSubscription = null
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        foregroundAwaitHandle?.cancel()
+        foregroundAwaitHandle = null
+        super.onDestroy()
     }
 
     private fun bindViews() {
@@ -195,7 +194,9 @@ class MainActivity : Activity() {
         )
         repository.save(config)
         control.arm(config).fold(
-            onSuccess = { returnToDamai(control) },
+            onSuccess = {
+                showInstruction(R.string.return_to_damai_manually)
+            },
             onFailure = { showMessage(getString(R.string.arm_failed)) },
         )
     }
@@ -219,64 +220,106 @@ class MainActivity : Activity() {
     private fun beginCalibration(stage: Stage) {
         val control = app.automationControl()
             ?: return showMessage(getString(R.string.service_not_connected))
-        showMessage(getString(R.string.switching_for_calibration))
-        if (!launchDamai()) return
-        mainHandler.postDelayed(
-            {
-                if (app.foregroundPackage() != DAMAI_PACKAGE) {
-                    return@postDelayed
-                }
-                control.captureCalibration(stage) { result ->
-                    result.onSuccess { bitmap ->
-                        val file = File(cacheDir, "pending-calibration-${stage.ordinal + 1}.png")
+        showInstruction(R.string.switching_for_calibration)
+        awaitDamaiForeground(control) {
+            control.captureCalibration(stage) { result ->
+                result.fold(
+                    onSuccess = { bitmap ->
+                        val file =
+                            File(cacheDir, "pending-calibration-${stage.ordinal + 1}.png")
                         val saved = runCatching {
                             FileOutputStream(file).use { stream ->
-                                check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream))
+                                check(
+                                    bitmap.compress(
+                                        android.graphics.Bitmap.CompressFormat.PNG,
+                                        100,
+                                        stream,
+                                    ),
+                                )
                             }
-                            app.setPendingCalibration(PendingCalibration(stage, file))
+                            app.setPendingCalibration(
+                                PendingCalibration(stage, file),
+                            )
+                            deliverCompletedWorkOnUiThread()
                         }
                         bitmap.recycle()
-                        if (saved.isFailure) file.delete()
-                    }
-                }
-            },
-            CAPTURE_DELAY_MILLIS,
-        )
+                        if (saved.isFailure) {
+                            file.delete()
+                            showMessageOnUiThread(R.string.calibration_capture_failed)
+                        }
+                    },
+                    onFailure = {
+                        showMessageOnUiThread(R.string.calibration_capture_failed)
+                    },
+                )
+            }
+        }
     }
 
     private fun beginDebugCapture() {
         val control = app.automationControl()
             ?: return showMessage(getString(R.string.service_not_connected))
-        showMessage(getString(R.string.switching_for_debug))
-        if (!launchDamai()) return
-        mainHandler.postDelayed(
-            {
-                if (app.foregroundPackage() != DAMAI_PACKAGE) {
-                    return@postDelayed
-                }
-                control.captureDebug { result ->
-                    result.onSuccess(app::setCompletedExport)
-                }
+        showInstruction(R.string.switching_for_debug)
+        awaitDamaiForeground(control) {
+            control.captureDebug { result ->
+                result.fold(
+                    onSuccess = { file ->
+                        app.setCompletedExport(file)
+                        deliverCompletedWorkOnUiThread()
+                    },
+                    onFailure = {
+                        showMessageOnUiThread(R.string.debug_capture_failed)
+                    },
+                )
+            }
+        }
+    }
+
+    private fun awaitDamaiForeground(
+        control: com.local.damaiassistant.AutomationControl,
+        onReady: () -> Unit,
+    ) {
+        foregroundAwaitHandle?.cancel()
+        foregroundAwaitHandle = ForegroundPackageAwaiter(
+            currentPackage = {
+                if (control.isDamaiActiveWindow()) DAMAI_PACKAGE else null
             },
-            CAPTURE_DELAY_MILLIS,
+            nowMillis = SystemClock::elapsedRealtime,
+            schedule = { delayMillis, action ->
+                mainHandler.postDelayed(action, delayMillis)
+            },
+        ).await(
+            expectedPackage = DAMAI_PACKAGE,
+            timeoutMillis = DAMAI_FOREGROUND_TIMEOUT_MILLIS,
+            pollIntervalMillis = DAMAI_FOREGROUND_POLL_MILLIS,
+            stableMillis = DAMAI_FOREGROUND_STABLE_MILLIS,
+            onReady = onReady,
+            onTimeout = {
+                showMessageOnUiThread(R.string.damai_switch_timeout)
+            },
         )
     }
 
-    private fun returnToDamai(control: com.local.damaiassistant.AutomationControl) {
-        if (!launchDamai()) {
-            control.stop()
+    private fun deliverCompletedWorkOnUiThread() {
+        runOnUiThread {
+            if (resumed) deliverCompletedWork()
         }
     }
 
-    private fun launchDamai(): Boolean {
-        val launchIntent = packageManager.getLaunchIntentForPackage(DAMAI_PACKAGE)
-        if (launchIntent == null) {
-            showMessage(getString(R.string.damai_not_installed))
-            return false
+    private fun deliverCompletedWork() {
+        app.consumeCompletedExport()?.let { file ->
+            recentLog.text = file.absolutePath
         }
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-        startActivity(launchIntent)
-        return true
+        app.consumePendingCalibration()?.let { pending ->
+            startActivity(
+                Intent(this, CalibrationActivity::class.java)
+                    .putExtra(CalibrationActivity.EXTRA_STAGE, pending.stage.name)
+                    .putExtra(
+                        CalibrationActivity.EXTRA_SCREENSHOT_PATH,
+                        pending.screenshot.absolutePath,
+                    ),
+            )
+        }
     }
 
     private fun refreshConnectionStatus() {
@@ -373,12 +416,22 @@ class MainActivity : Activity() {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
+    private fun showMessageOnUiThread(messageResId: Int) {
+        runOnUiThread { showMessage(getString(messageResId)) }
+    }
+
+    private fun showInstruction(messageResId: Int) {
+        recentLog.text = getString(messageResId)
+    }
+
     private companion object {
         const val CONFIG_PREFERENCES = "automation_config"
         const val DAMAI_PACKAGE = "cn.damai"
         const val DEFAULT_TARGET_DELAY_MILLIS = 5 * 60 * 1000L
         const val TEST_NOW_DELAY_MILLIS = 500L
-        const val CAPTURE_DELAY_MILLIS = 800L
+        const val DAMAI_FOREGROUND_TIMEOUT_MILLIS = 10_000L
+        const val DAMAI_FOREGROUND_POLL_MILLIS = 100L
+        const val DAMAI_FOREGROUND_STABLE_MILLIS = 250L
         val ACTIVE_STATES = setOf(
             RunState.ARMED,
             RunState.STAGE_1_RESERVE,
