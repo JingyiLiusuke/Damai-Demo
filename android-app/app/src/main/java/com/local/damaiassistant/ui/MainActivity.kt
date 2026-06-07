@@ -94,7 +94,14 @@ class MainActivity : Activity() {
         armButton.setOnClickListener { arm() }
         stopButton.setOnClickListener { app.automationControl()?.stop() }
         findViewById<Button>(R.id.export_log_button).setOnClickListener {
-            showMessage("Log export is available from the debug screen in the next step")
+            app.automationControl()?.exportLog { result ->
+                runOnUiThread {
+                    result.fold(
+                        onSuccess = { file -> recentLog.text = file.absolutePath },
+                        onFailure = { error -> showMessage(error.message ?: "Export failed") },
+                    )
+                }
+            } ?: showMessage("Accessibility service is not connected")
         }
         debugCaptureButton.setOnClickListener {
             app.automationControl()?.captureDebug { result ->
@@ -200,7 +207,11 @@ class MainActivity : Activity() {
     private fun renderSnapshot(snapshot: RuntimeSnapshot) {
         refreshConnectionStatus()
         runState.text = "${snapshot.state}: ${snapshot.message}"
-        recentLog.text = snapshot.message
+        recentLog.text = app.automationControl()
+            ?.recentLogs()
+            ?.takeLast(5)
+            ?.joinToString("\n") { entry -> "${entry.category}: ${entry.message}" }
+            .orEmpty()
         val active = snapshot.state in ACTIVE_STATES
         armButton.isEnabled = !active
         stopButton.isEnabled = active

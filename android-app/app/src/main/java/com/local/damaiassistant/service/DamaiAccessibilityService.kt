@@ -19,6 +19,7 @@ import com.local.damaiassistant.config.ConfigRepository
 import com.local.damaiassistant.config.NormalizedRect
 import com.local.damaiassistant.config.PixelPoint
 import com.local.damaiassistant.config.SharedPreferencesKeyValueStore
+import com.local.damaiassistant.debug.DebugCaptureManager
 import com.local.damaiassistant.domain.RuntimeSnapshot
 import com.local.damaiassistant.domain.Stage
 import com.local.damaiassistant.logging.RunLogger
@@ -30,7 +31,6 @@ import com.local.damaiassistant.runtime.TriggerScheduler
 import com.local.damaiassistant.runtime.VisualGateway
 import com.local.damaiassistant.runtime.WindowObservation
 import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -44,6 +44,7 @@ class DamaiAccessibilityService : AccessibilityService() {
     private lateinit var screenshots: ScreenshotController
     private lateinit var coordinator: AutomationCoordinator
     private lateinit var control: ServiceAutomationControl
+    private lateinit var debugCaptureManager: DebugCaptureManager
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -79,6 +80,7 @@ class DamaiAccessibilityService : AccessibilityService() {
             screenshotMinIntervalMillis = initialConfig.screenshotMinIntervalMillis,
         )
         val logger = RunLogger(LOG_CAPACITY)
+        debugCaptureManager = DebugCaptureManager(filesDir, cacheDir)
 
         coordinator = AutomationCoordinator(
             executor = serialExecutor,
@@ -147,7 +149,7 @@ class DamaiAccessibilityService : AccessibilityService() {
                 callback(Result.failure(IllegalStateException("Service is disconnected")))
                 return
             }
-            screenshots.capture(FULL_SCREEN) { result ->
+            val accepted = screenshots.capture(FULL_SCREEN) { result ->
                 logger.record(
                     category = "calibration",
                     message = "Captured calibration image for $stage",
@@ -156,6 +158,13 @@ class DamaiAccessibilityService : AccessibilityService() {
                 )
                 callback(result)
             }
+            if (!accepted) {
+                callback(
+                    Result.failure(
+                        IllegalStateException("Screenshot request is busy or throttled"),
+                    ),
+                )
+            }
         }
 
         override fun captureDebug(callback: (Result<File>) -> Unit) {
@@ -163,30 +172,45 @@ class DamaiAccessibilityService : AccessibilityService() {
                 callback(Result.failure(IllegalStateException("Service is disconnected")))
                 return
             }
-            screenshots.capture(FULL_SCREEN) { captureResult ->
-                val fileResult = captureResult.mapCatching { bitmap ->
-                    try {
-                        val directory = File(cacheDir, DEBUG_DIRECTORY)
-                        check(directory.exists() || directory.mkdirs()) {
-                            "Unable to create debug capture directory"
+            val accepted = screenshots.capture(FULL_SCREEN) { captureResult ->
+                captureResult.fold(
+                    onSuccess = { bitmap ->
+                        val posted = runtimeHandler.post {
+                            callback(
+                                debugCaptureManager.createBundle(
+                                    bitmap = bitmap,
+                                    root = rootInActiveWindow,
+                                    config = repository.load(),
+                                    logs = logger.snapshot(),
+                                ),
+                            )
                         }
-                        val output = File(
-                            directory,
-                            "capture-${System.currentTimeMillis()}.png",
-                        )
-                        FileOutputStream(output).use { stream ->
-                            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) {
-                                "Unable to encode debug screenshot"
-                            }
+                        if (!posted) {
+                            bitmap.recycle()
+                            callback(
+                                Result.failure(
+                                    IllegalStateException("Automation thread is closed"),
+                                ),
+                            )
                         }
-                        output
-                    } finally {
-                        bitmap.recycle()
-                    }
-                }
-                callback(fileResult)
+                    },
+                    onFailure = { error -> callback(Result.failure(error)) },
+                )
+            }
+            if (!accepted) {
+                callback(
+                    Result.failure(
+                        IllegalStateException("Screenshot request is busy or throttled"),
+                    ),
+                )
             }
         }
+
+        override fun exportLog(callback: (Result<File>) -> Unit) {
+            callback(debugCaptureManager.exportLog(logger.snapshot()))
+        }
+
+        override fun recentLogs() = logger.snapshot()
 
         override fun snapshot(): RuntimeSnapshot = coordinator.snapshot()
     }
@@ -321,7 +345,6 @@ class DamaiAccessibilityService : AccessibilityService() {
         const val SUBMIT_TEXT = "立即提交"
         const val RUNTIME_THREAD_NAME = "damai-automation"
         const val CONFIG_PREFERENCES = "automation_config"
-        const val DEBUG_DIRECTORY = "debug-captures"
         const val LOG_CAPACITY = 500
         val FULL_SCREEN = NormalizedRect(0f, 0f, 1f, 1f)
         val OBSERVED_EVENT_TYPES = setOf(

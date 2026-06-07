@@ -67,15 +67,18 @@ class RunLogger(
         }
     }
 
-    private fun sanitizeMessage(message: String): String =
-        sensitiveDigits.replace(normalizeField(message), REDACTED)
+    private fun sanitizeMessage(message: String): String = redact(message)
 
-    private fun normalizeField(value: String): String =
-        fieldSeparators.replace(value, " ").trim()
-
-    private companion object {
+    companion object {
         const val REDACTED = "[REDACTED]"
-        val sensitiveDigits = Regex("""\d{7,}""")
-        val fieldSeparators = Regex("""[\t\r\n]+""")
+
+        fun redact(value: String): String =
+            sensitiveDigits.replace(normalizeField(value), REDACTED)
+
+        private fun normalizeField(value: String): String =
+            fieldSeparators.replace(value, " ").trim()
+
+        private val sensitiveDigits = Regex("""\d{7,}""")
+        private val fieldSeparators = Regex("""[\t\r\n]+""")
     }
 }

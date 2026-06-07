@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import com.local.damaiassistant.config.AutomationConfig
 import com.local.damaiassistant.domain.RuntimeSnapshot
 import com.local.damaiassistant.domain.Stage
+import com.local.damaiassistant.logging.RunLogEntry
 import java.io.File
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.atomic.AtomicReference
@@ -17,6 +18,10 @@ interface AutomationControl {
     fun captureCalibration(stage: Stage, callback: (Result<Bitmap>) -> Unit)
 
     fun captureDebug(callback: (Result<File>) -> Unit)
+
+    fun exportLog(callback: (Result<File>) -> Unit)
+
+    fun recentLogs(): List<RunLogEntry>
 
     fun snapshot(): RuntimeSnapshot
 }
