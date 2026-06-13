@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">大麦自动化助手</string>
+    <string name="accessibility_service_name">大麦自动化助手</string>
+    <string name="accessibility_service_description">在用户手动控制下，通过无障碍节点、手势和截图执行本地大麦操作流程。</string>
+
+    <string name="usage_summary">使用前请先登录大麦并进入目标项目页面，完成三个阶段的区域校准，然后设置开售时间并点击“开始待命”。运行期间请保持手机亮屏、解锁且大麦位于前台。</string>
+    <string name="section_time">一、时间设置</string>
+    <string name="target_time_label">目标开售时间（格式：yyyy-MM-dd HH:mm:ss.SSS）</string>
+    <string name="pre_trigger_offset_hint">提前触发时间（毫秒，例如 100）</string>
+    <string name="test_now_label">立即测试模式（约 500 毫秒后触发，仅用于安全测试）</string>
+    <string name="section_regions">二、阶段点击区域</string>
+    <string name="regions_help">阶段一：立即预定；阶段二：确定票价；阶段三：立即提交。点击“校准阶段区域”重新截图并框选按钮。</string>
+    <string name="section_detection">三、检测设置</string>
+    <string name="visual_fallback_label">启用截图模板匹配兜底</string>
+    <string name="result_text_hint">成功结果文字，每行一个，例如：支付、订单、提交成功</string>
+    <string name="section_status">四、服务与运行状态</string>
+    <string name="section_actions">五、运行操作</string>
+    <string name="section_debug">六、调试工具</string>
+    <string name="open_accessibility_settings">打开无障碍设置</string>
+    <string name="calibrate_stage">校准阶段区域</string>
+    <string name="arm_automation">开始待命</string>
+    <string name="stop_automation">立即停止</string>
+    <string name="export_run_log">导出运行日志</string>
+    <string name="capture_debug">采集大麦调试包</string>
+
+    <string name="calibration_cancel">取消</string>
+    <string name="calibration_save">保存区域和模板</string>
+    <string name="calibration_loading_failed">无法读取校准截图</string>
+    <string name="calibration_instructions">拖动空白处创建选区；拖动选区内部可移动；拖动四角可调整大小。</string>
+    <string name="calibration_no_screenshot">当前没有可用截图</string>
+    <string name="calibration_selection_too_small">请选择至少 20 × 20 像素的区域</string>
+    <string name="calibration_saved">已保存：%1$d × %2$d 像素\n%3$s</string>
+    <string name="calibration_save_failed">保存校准数据失败</string>
+
+    <string name="service_not_connected">无障碍服务尚未连接，请先开启“大麦自动化助手”无障碍权限</string>
+    <string name="open_damai_first">请先打开大麦，并等待助手识别到大麦位于前台</string>
+    <string name="screen_must_be_awake">请保持手机亮屏并解锁</string>
+    <string name="invalid_target_time">时间格式错误，请使用 yyyy-MM-dd HH:mm:ss.SSS</string>
+    <string name="invalid_offset">提前触发时间必须是大于或等于 0 的整数</string>
+    <string name="trigger_must_be_future">触发时间必须晚于当前时间</string>
+    <string name="result_text_required">请至少填写一个成功结果文字</string>
+    <string name="arm_failed">无法开始待命</string>
+    <string name="export_failed">日志导出失败</string>
+    <string name="return_to_damai_manually">已进入待命，请立即手动返回大麦目标页面并保持在前台</string>
+    <string name="choose_stage">选择要校准的阶段</string>
+    <string name="stage_1_name">阶段一：立即预定</string>
+    <string name="stage_2_name">阶段二：确定票价</string>
+    <string name="stage_3_name">阶段三：立即提交</string>
+    <string name="switching_for_calibration">请在 10 秒内手动返回大麦目标页面。识别到页面稳定后将自动截图；完成后再返回本助手框选。</string>
+    <string name="switching_for_debug">请在 10 秒内手动返回大麦目标页面。识别到页面稳定后将自动采集调试包。</string>
+    <string name="damai_switch_timeout">10 秒内未确认大麦进入前台，请从目标页面返回本助手后重试</string>
+    <string name="calibration_capture_failed">大麦已进入前台，但校准截图失败，请稍后重试</string>
+    <string name="debug_capture_failed">大麦已进入前台，但调试包采集失败，请稍后重试</string>
+    <string name="accessibility_status_format">无障碍服务：%1$s\n最近前台应用包名：%2$s</string>
+    <string name="connected">已连接</string>
+    <string name="disconnected">未连接</string>
+    <string name="none">无</string>
+    <string name="run_state_format">运行状态：%1$s\n%2$s</string>
+</resources>

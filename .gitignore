@@ -1,0 +1,9 @@
+.worktrees/
+.idea/
+__pycache__/
+*.pyc
+
+# Android generated output
+android-app/.gradle/
+android-app/.kotlin/
+android-app/**/build/

@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="12dp"
+            android:text="@string/usage_summary" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/section_time"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/target_time_label" />
+
+        <EditText
+            android:id="@+id/target_time_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text" />
+
+        <EditText
+            android:id="@+id/pre_trigger_offset_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/pre_trigger_offset_hint"
+            android:inputType="number" />
+
+        <Switch
+            android:id="@+id/test_now_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/test_now_label" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="@string/section_regions"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="6dp"
+            android:text="@string/regions_help" />
+
+        <TextView
+            android:id="@+id/stage1_rect_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/stage2_rect_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/stage3_rect_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="@string/section_detection"
+            android:textStyle="bold" />
+
+        <Switch
+            android:id="@+id/visual_fallback_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/visual_fallback_label" />
+
+        <EditText
+            android:id="@+id/result_text_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="top"
+            android:hint="@string/result_text_hint"
+            android:inputType="textMultiLine"
+            android:minLines="3" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="@string/section_status"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/accessibility_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/run_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/recent_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minLines="2" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="@string/section_actions"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/open_accessibility_settings_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/open_accessibility_settings" />
+
+        <Button
+            android:id="@+id/calibrate_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/calibrate_stage" />
+
+        <Button
+            android:id="@+id/arm_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/arm_automation" />
+
+        <Button
+            android:id="@+id/stop_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/stop_automation" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="@string/section_debug"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/export_log_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/export_run_log" />
+
+        <Button
+            android:id="@+id/debug_capture_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/capture_debug" />
+    </LinearLayout>
+</ScrollView>
