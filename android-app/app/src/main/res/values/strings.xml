@@ -13,6 +13,17 @@
     <string name="regions_help">阶段一：立即预定；阶段二：确定票价；阶段三：立即提交。点击“校准阶段区域”重新截图并框选按钮。</string>
     <string name="section_detection">三、检测设置</string>
     <string name="visual_fallback_label">启用截图模板匹配兜底</string>
+    <string name="low_latency_label">启用低延迟坐标优先模式</string>
+    <string name="visual_fallback_delay_hint">节点/视觉恢复延迟（毫秒，建议 250-400）</string>
+    <string name="invalid_visual_fallback_delay">恢复延迟必须是大于或等于 0 的整数</string>
+    <string name="shizuku_usage_help">Shizuku 启动并授权后可以拔掉 USB 脱机运行；手机重启后需要重新通过 adb 启动 Shizuku。实际使用前请确认下方状态为已运行、已授权且已绑定。</string>
+    <string name="shizuku_status_format">Shizuku：%1$s / %2$s / %3$s\n当前输入模式：%4$s</string>
+    <string name="shizuku_running">已运行</string>
+    <string name="shizuku_not_running">未运行</string>
+    <string name="shizuku_authorized">已授权</string>
+    <string name="shizuku_not_authorized">未授权</string>
+    <string name="shizuku_bound">已绑定</string>
+    <string name="shizuku_not_bound">未绑定</string>
     <string name="result_text_hint">成功结果文字，每行一个，例如：支付、订单、提交成功</string>
     <string name="section_status">四、服务与运行状态</string>
     <string name="section_actions">五、运行操作</string>

@@ -22,6 +22,7 @@ enum class Stage {
 
 enum class ActionPhase {
     NONE,
+    COORDINATE_IN_FLIGHT,
     READY_FOR_NODE,
     NODE_IN_FLIGHT,
     WAITING_VISUAL,

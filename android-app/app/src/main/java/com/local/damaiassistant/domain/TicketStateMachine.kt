@@ -144,7 +144,13 @@ class TicketStateMachine {
         now: Long,
     ): Transition {
         if (input == Input.FeatureObserved(Stage.STAGE_2)) {
-            return enterNodeStage(snapshot, RunState.STAGE_2_CONFIRM_PRICE, Stage.STAGE_2, now)
+            return enterActionStage(
+                snapshot,
+                RunState.STAGE_2_CONFIRM_PRICE,
+                Stage.STAGE_2,
+                config,
+                now,
+            )
         }
 
         if (input is Input.GestureFinished) {
@@ -185,7 +191,13 @@ class TicketStateMachine {
             stage == Stage.STAGE_2 &&
             input == Input.FeatureObserved(Stage.STAGE_3)
         ) {
-            return enterNodeStage(snapshot, RunState.STAGE_3_SUBMIT, Stage.STAGE_3, now)
+            return enterActionStage(
+                snapshot,
+                RunState.STAGE_3_SUBMIT,
+                Stage.STAGE_3,
+                config,
+                now,
+            )
         }
 
         if (input is Input.NodeClickFinished) {
@@ -199,7 +211,12 @@ class TicketStateMachine {
                 )
                 return Transition(
                     next,
-                    listOf(Effect.ScheduleTick(policy.retryMillis, next.generation)),
+                    listOf(
+                        Effect.ScheduleTick(
+                            config.visualFallbackDelayMillis,
+                            next.generation,
+                        ),
+                    ),
                 )
             }
             clickLimitTransition(snapshot, policy, stage == Stage.STAGE_3, now)?.let {
@@ -217,10 +234,24 @@ class TicketStateMachine {
 
         if (input is Input.GestureFinished) {
             if (!snapshot.gestureInFlight) return unchanged(snapshot)
-            val next = snapshot.copy(gestureInFlight = false)
+            val next = snapshot.copy(
+                gestureInFlight = false,
+                actionPhase = if (
+                    snapshot.actionPhase == ActionPhase.COORDINATE_IN_FLIGHT
+                ) {
+                    ActionPhase.READY_FOR_NODE
+                } else {
+                    snapshot.actionPhase
+                },
+            )
             return Transition(
                 next,
-                listOf(Effect.ScheduleTick(policy.retryMillis, next.generation)),
+                listOf(
+                    Effect.ScheduleTick(
+                        config.visualFallbackDelayMillis,
+                        next.generation,
+                    ),
+                ),
             )
         }
 
@@ -280,10 +311,35 @@ class TicketStateMachine {
             }
 
             ActionPhase.NONE,
+            ActionPhase.COORDINATE_IN_FLIGHT,
             ActionPhase.NODE_IN_FLIGHT,
             ActionPhase.VISUAL_IN_FLIGHT,
             -> unchanged(snapshot)
         }
+    }
+
+    private fun enterActionStage(
+        snapshot: RuntimeSnapshot,
+        state: RunState,
+        stage: Stage,
+        config: AutomationConfig,
+        now: Long,
+    ): Transition {
+        if (!config.lowLatencyEnabled) {
+            return enterNodeStage(snapshot, state, stage, now)
+        }
+        val next = snapshot.copy(
+            state = state,
+            generation = snapshot.generation + 1,
+            enteredAtNanos = now,
+            clickCount = 1,
+            screenshotCount = 0,
+            gestureInFlight = true,
+            lastClickAtNanos = now,
+            actionPhase = ActionPhase.COORDINATE_IN_FLIGHT,
+            message = "$stage coordinate click requested",
+        )
+        return Transition(next, listOf(Effect.ClickCoordinate(stage)))
     }
 
     private fun enterNodeStage(

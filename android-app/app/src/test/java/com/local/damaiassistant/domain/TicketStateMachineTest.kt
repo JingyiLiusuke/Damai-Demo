@@ -49,7 +49,9 @@ class TicketStateMachineTest {
         )
 
         assertEquals(RunState.STAGE_2_CONFIRM_PRICE, transition.snapshot.state)
-        assertEquals(Effect.ClickNode(Stage.STAGE_2), transition.effects.first())
+        assertTrue(transition.snapshot.gestureInFlight)
+        assertEquals(ActionPhase.COORDINATE_IN_FLIGHT, transition.snapshot.actionPhase)
+        assertEquals(Effect.ClickCoordinate(Stage.STAGE_2), transition.effects.first())
     }
 
     @Test
@@ -69,7 +71,33 @@ class TicketStateMachineTest {
             21L,
         )
         assertEquals(RunState.STAGE_3_SUBMIT, advanced.snapshot.state)
-        assertEquals(listOf(Effect.ClickNode(Stage.STAGE_3)), advanced.effects)
+        assertTrue(advanced.snapshot.gestureInFlight)
+        assertEquals(ActionPhase.COORDINATE_IN_FLIGHT, advanced.snapshot.actionPhase)
+        assertEquals(listOf(Effect.ClickCoordinate(Stage.STAGE_3)), advanced.effects)
+    }
+
+    @Test
+    fun coordinateFirstStageDelaysNodeRecovery() {
+        val snapshot = stage2Snapshot(
+            generation = 8,
+            phase = ActionPhase.COORDINATE_IN_FLIGHT,
+            gestureInFlight = true,
+            clicks = 1,
+        )
+
+        val completed = machine.reduce(
+            snapshot,
+            Input.GestureFinished(generation = 8, succeeded = true),
+            config,
+            100L,
+        )
+
+        assertFalse(completed.snapshot.gestureInFlight)
+        assertEquals(ActionPhase.READY_FOR_NODE, completed.snapshot.actionPhase)
+        assertEquals(
+            listOf(Effect.ScheduleTick(config.visualFallbackDelayMillis, 8)),
+            completed.effects,
+        )
     }
 
     @Test
@@ -128,7 +156,7 @@ class TicketStateMachineTest {
         )
         assertEquals(ActionPhase.WAITING_VISUAL, completed.snapshot.actionPhase)
         assertEquals(
-            listOf(Effect.ScheduleTick(config.stage2.retryMillis, 8)),
+            listOf(Effect.ScheduleTick(config.visualFallbackDelayMillis, 8)),
             completed.effects,
         )
 
@@ -136,7 +164,7 @@ class TicketStateMachineTest {
             completed.snapshot,
             Input.Tick,
             config,
-            now = 100L + config.stage2.retryMillis * 1_000_000L,
+            now = 100L + config.visualFallbackDelayMillis * 1_000_000L,
         )
         assertEquals(ActionPhase.VISUAL_IN_FLIGHT, tick.snapshot.actionPhase)
         assertEquals(1, tick.snapshot.screenshotCount)
@@ -396,6 +424,7 @@ class TicketStateMachineTest {
         screenshots: Int = 0,
         phase: ActionPhase = ActionPhase.NODE_IN_FLIGHT,
         lastClickAtNanos: Long? = null,
+        gestureInFlight: Boolean = false,
     ) = RuntimeSnapshot(
         state = RunState.STAGE_2_CONFIRM_PRICE,
         generation = generation,
@@ -404,6 +433,7 @@ class TicketStateMachineTest {
         screenshotCount = screenshots,
         actionPhase = phase,
         lastClickAtNanos = lastClickAtNanos,
+        gestureInFlight = gestureInFlight,
     )
 
     private fun stage3Snapshot(

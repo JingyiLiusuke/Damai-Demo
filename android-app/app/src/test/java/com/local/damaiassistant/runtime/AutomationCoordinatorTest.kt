@@ -58,7 +58,7 @@ class AutomationCoordinatorTest {
     }
 
     @Test
-    fun observedBuyButtonAdvancesToStage2AndClicksNode() {
+    fun observedBuyButtonAdvancesToStage2AndClicksCoordinate() {
         nodes.observation = WindowObservation(buyButtonVisible = true)
         coordinator.arm(config)
         executor.runAll()
@@ -67,7 +67,8 @@ class AutomationCoordinatorTest {
         executor.runAll()
 
         assertEquals(RunState.STAGE_2_CONFIRM_PRICE, coordinator.snapshot().state)
-        assertEquals(listOf(Stage.STAGE_2), nodes.clicks)
+        assertEquals(Stage.STAGE_2, gestures.stage)
+        assertTrue(nodes.clicks.isEmpty())
     }
 
     @Test

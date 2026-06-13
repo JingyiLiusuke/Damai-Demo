@@ -112,6 +112,8 @@ class ConfigRepository(
         store.putLong(SCREENSHOT_MIN_INTERVAL_MILLIS, config.screenshotMinIntervalMillis)
         store.putInt(MAX_SCREENSHOTS_PER_STAGE, config.maxScreenshotsPerStage)
         store.putBoolean(VISUAL_FALLBACK_ENABLED, config.visualFallbackEnabled)
+        store.putBoolean(LOW_LATENCY_ENABLED, config.lowLatencyEnabled)
+        store.putLong(VISUAL_FALLBACK_DELAY_MILLIS, config.visualFallbackDelayMillis)
 
         store.putInt(RESULT_TEXT_COUNT, config.resultTexts.size)
         config.resultTexts.forEachIndexed { index, resultText ->
@@ -197,6 +199,14 @@ class ConfigRepository(
                 visualFallbackEnabled = store.getBoolean(
                     VISUAL_FALLBACK_ENABLED,
                     defaults.visualFallbackEnabled,
+                ),
+                lowLatencyEnabled = store.getBoolean(
+                    LOW_LATENCY_ENABLED,
+                    defaults.lowLatencyEnabled,
+                ),
+                visualFallbackDelayMillis = store.getLong(
+                    VISUAL_FALLBACK_DELAY_MILLIS,
+                    defaults.visualFallbackDelayMillis,
                 ),
             )
         } catch (_: RuntimeException) {
@@ -292,5 +302,7 @@ class ConfigRepository(
         const val MAX_SCREENSHOTS_PER_STAGE = "max_screenshots_per_stage"
         const val RESULT_TEXT_COUNT = "result_text_count"
         const val VISUAL_FALLBACK_ENABLED = "visual_fallback_enabled"
+        const val LOW_LATENCY_ENABLED = "low_latency_enabled"
+        const val VISUAL_FALLBACK_DELAY_MILLIS = "visual_fallback_delay_millis"
     }
 }

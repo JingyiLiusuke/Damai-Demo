@@ -6,6 +6,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.local.damaiassistant.config.AutomationConfig
 import com.local.damaiassistant.logging.RunLogEntry
 import com.local.damaiassistant.logging.RunLogger
+import com.local.damaiassistant.logging.PerformanceTraceEntry
+import com.local.damaiassistant.logging.PerformanceTraceLogger
 import java.io.File
 import java.io.FileOutputStream
 import java.util.ArrayDeque
@@ -21,6 +23,7 @@ class DebugCaptureManager(
         root: AccessibilityNodeInfo?,
         config: AutomationConfig,
         logs: List<RunLogEntry>,
+        performanceTrace: List<PerformanceTraceEntry> = emptyList(),
         timestampMillis: Long = System.currentTimeMillis(),
     ): Result<File> = runCatching {
         val workspace = File(cacheDir, "debug-capture-$timestampMillis")
@@ -36,6 +39,10 @@ class DebugCaptureManager(
                 Charsets.UTF_8,
             )
             writeLogs(logs, File(workspace, LOG_FILE))
+            writePerformanceTrace(
+                performanceTrace,
+                File(workspace, PERFORMANCE_TRACE_FILE),
+            )
 
             val exportDirectory = exportDirectory()
             val output = File(exportDirectory, "debug-capture-$timestampMillis.zip")
@@ -59,10 +66,22 @@ class DebugCaptureManager(
 
     fun exportLog(
         logs: List<RunLogEntry>,
+        performanceTrace: List<PerformanceTraceEntry> = emptyList(),
         timestampMillis: Long = System.currentTimeMillis(),
     ): Result<File> = runCatching {
-        val output = File(exportDirectory(), "run-log-$timestampMillis.txt")
-        writeLogs(logs, output)
+        val output = File(exportDirectory(), "run-log-$timestampMillis.zip")
+        ZipOutputStream(FileOutputStream(output)).use { zip ->
+            zip.putNextEntry(ZipEntry(LOG_FILE))
+            val runLog = StringBuilder()
+            writeLogs(logs, runLog)
+            zip.write(runLog.toString().toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+            zip.putNextEntry(ZipEntry(PERFORMANCE_TRACE_FILE))
+            val trace = StringBuilder()
+            writePerformanceTrace(performanceTrace, trace)
+            zip.write(trace.toString().toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+        }
         pruneExports(output.parentFile ?: filesDir, output)
         output
     }
@@ -139,16 +158,60 @@ class DebugCaptureManager(
 
     private fun writeLogs(entries: List<RunLogEntry>, output: File) {
         output.bufferedWriter(Charsets.UTF_8).use { writer ->
-            entries.forEach { entry ->
-                writer.append(entry.wallMillis.toString())
-                writer.append('\t')
-                writer.append(entry.elapsedNanos.toString())
-                writer.append('\t')
-                writer.append(RunLogger.redact(entry.category))
-                writer.append('\t')
-                writer.append(RunLogger.redact(entry.message))
-                writer.newLine()
+            writeLogs(entries, writer)
+        }
+    }
+
+    private fun writeLogs(entries: List<RunLogEntry>, writer: Appendable) {
+        entries.forEach { entry ->
+            writer.append(entry.wallMillis.toString())
+            writer.append('\t')
+            writer.append(entry.elapsedNanos.toString())
+            writer.append('\t')
+            writer.append(RunLogger.redact(entry.category))
+            writer.append('\t')
+            writer.append(RunLogger.redact(entry.message))
+            writer.append('\n')
+        }
+    }
+
+    private fun writePerformanceTrace(
+        entries: List<PerformanceTraceEntry>,
+        output: File,
+    ) {
+        output.bufferedWriter(Charsets.UTF_8).use { writer ->
+            writePerformanceTrace(entries, writer)
+        }
+    }
+
+    private fun writePerformanceTrace(
+        entries: List<PerformanceTraceEntry>,
+        writer: Appendable,
+    ) {
+        writer.append(PerformanceTraceLogger.HEADER)
+        writer.append('\n')
+        var previous: Long? = null
+        entries.forEach { entry ->
+            val duration = previous?.let {
+                (entry.elapsedNanos - it).coerceAtLeast(0L)
             }
+            previous = entry.elapsedNanos
+            writer.append(entry.wallMillis.toString())
+            writer.append('\t')
+            writer.append(entry.elapsedNanos.toString())
+            writer.append('\t')
+            writer.append(duration?.toString().orEmpty())
+            writer.append('\t')
+            writer.append(entry.event.wireName)
+            writer.append('\t')
+            writer.append(entry.stage?.name.orEmpty())
+            writer.append('\t')
+            writer.append(entry.inputMode?.name.orEmpty())
+            writer.append('\t')
+            writer.append(entry.foreground.orEmpty())
+            writer.append('\t')
+            writer.append(entry.reason.orEmpty())
+            writer.append('\n')
         }
     }
 
@@ -193,6 +256,8 @@ class DebugCaptureManager(
             )
             appendLine("maxScreenshotsPerStage=${config.maxScreenshotsPerStage}")
             appendLine("visualFallbackEnabled=${config.visualFallbackEnabled}")
+            appendLine("lowLatencyEnabled=${config.lowLatencyEnabled}")
+            appendLine("visualFallbackDelayMillis=${config.visualFallbackDelayMillis}")
         }
 
         private const val MAX_NODES = 500
@@ -204,11 +269,13 @@ class DebugCaptureManager(
         private const val SCREEN_FILE = "screen.png"
         private const val CONFIG_FILE = "config.txt"
         private const val LOG_FILE = "run-log.txt"
+        private const val PERFORMANCE_TRACE_FILE = "performance-trace.tsv"
         private val BUNDLE_FILES = listOf(
             NODES_FILE,
             SCREEN_FILE,
             CONFIG_FILE,
             LOG_FILE,
+            PERFORMANCE_TRACE_FILE,
         )
     }
 }
