@@ -4,12 +4,14 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Switch
@@ -18,6 +20,8 @@ import android.widget.Toast
 import com.local.damaiassistant.DamaiAssistantApp
 import com.local.damaiassistant.PendingCalibration
 import com.local.damaiassistant.R
+import com.local.damaiassistant.automation.InputMode
+import com.local.damaiassistant.automation.ShizukuShellTapper
 import com.local.damaiassistant.config.AutomationConfig
 import com.local.damaiassistant.config.ConfigRepository
 import com.local.damaiassistant.config.NormalizedRect
@@ -29,6 +33,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.io.File
 import java.io.FileOutputStream
+import rikka.shizuku.Shizuku
 
 class MainActivity : Activity() {
     private lateinit var app: DamaiAssistantApp
@@ -37,8 +42,11 @@ class MainActivity : Activity() {
     private lateinit var offset: EditText
     private lateinit var resultTexts: EditText
     private lateinit var visualFallback: Switch
+    private lateinit var lowLatency: Switch
+    private lateinit var visualFallbackDelay: EditText
     private lateinit var testNow: Switch
     private lateinit var accessibilityStatus: TextView
+    private lateinit var shizukuStatus: TextView
     private lateinit var runState: TextView
     private lateinit var recentLog: TextView
     private lateinit var armButton: Button
@@ -48,6 +56,19 @@ class MainActivity : Activity() {
     private var foregroundAwaitHandle: ForegroundAwaitHandle? = null
     private var resumed = false
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val shizukuPermissionListener =
+        Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+            if (requestCode == ShizukuShellTapper.REQUEST_CODE) {
+                showMessage(
+                    if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                        "Shizuku 已授权，请再次点击“开始待命”。"
+                    } else {
+                        "Shizuku 授权被拒绝。"
+                    },
+                )
+                refreshShizukuStatus(prewarm = grantResult == PackageManager.PERMISSION_GRANTED)
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,6 +82,9 @@ class MainActivity : Activity() {
         bindViews()
         bindActions()
         loadConfig()
+        runCatching {
+            Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+        }
     }
 
     override fun onResume() {
@@ -72,6 +96,7 @@ class MainActivity : Activity() {
         }
         loadConfig()
         refreshConnectionStatus()
+        refreshShizukuStatus(prewarm = true)
         snapshotSubscription?.close()
         snapshotSubscription = app.addSnapshotListener { snapshot ->
             runOnUiThread { renderSnapshot(snapshot) }
@@ -89,6 +114,9 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         foregroundAwaitHandle?.cancel()
         foregroundAwaitHandle = null
+        runCatching {
+            Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
+        }
         super.onDestroy()
     }
 
@@ -97,8 +125,11 @@ class MainActivity : Activity() {
         offset = findViewById(R.id.pre_trigger_offset_input)
         resultTexts = findViewById(R.id.result_text_input)
         visualFallback = findViewById(R.id.visual_fallback_switch)
+        lowLatency = findViewById(R.id.low_latency_switch)
+        visualFallbackDelay = findViewById(R.id.visual_fallback_delay_input)
         testNow = findViewById(R.id.test_now_switch)
         accessibilityStatus = findViewById(R.id.accessibility_status)
+        shizukuStatus = findViewById(R.id.shizuku_status)
         runState = findViewById(R.id.run_state)
         recentLog = findViewById(R.id.recent_log)
         armButton = findViewById(R.id.arm_button)
@@ -145,6 +176,8 @@ class MainActivity : Activity() {
         offset.setText(config.preTriggerOffsetMillis.toString())
         resultTexts.setText(config.resultTexts.joinToString("\n"))
         visualFallback.isChecked = config.visualFallbackEnabled
+        lowLatency.isChecked = config.lowLatencyEnabled
+        visualFallbackDelay.setText(config.visualFallbackDelayMillis.toString())
         findViewById<TextView>(R.id.stage1_rect_summary).text =
             formatRect(Stage.STAGE_1, config.stage1Rect)
         findViewById<TextView>(R.id.stage2_rect_summary).text =
@@ -156,26 +189,23 @@ class MainActivity : Activity() {
     private fun arm() {
         val control = app.automationControl()
             ?: return showMessage(getString(R.string.service_not_connected))
-        if (app.foregroundPackage() != DAMAI_PACKAGE) {
-            return showMessage(getString(R.string.open_damai_first))
-        }
         val power = getSystemService(PowerManager::class.java)
         if (!power.isInteractive) {
             return showMessage(getString(R.string.screen_must_be_awake))
         }
+        if (!ensureShizukuReady()) return
 
         val parsedTarget = parseTargetTime(targetTime.text.toString())
             ?: return showMessage(getString(R.string.invalid_target_time))
         val parsedOffset = offset.text.toString().toLongOrNull()
             ?.takeIf { it >= 0L }
             ?: return showMessage(getString(R.string.invalid_offset))
+        val parsedFallbackDelay = visualFallbackDelay.text.toString().toLongOrNull()
+            ?.takeIf { it >= 0L }
+            ?: return showMessage(getString(R.string.invalid_visual_fallback_delay))
         val now = System.currentTimeMillis()
-        val effectiveTarget = if (testNow.isChecked) {
-            now + parsedOffset + TEST_NOW_DELAY_MILLIS
-        } else {
-            parsedTarget
-        }
-        if (effectiveTarget - parsedOffset <= now) {
+        val immediateTest = testNow.isChecked
+        if (!immediateTest && parsedTarget - parsedOffset <= now) {
             return showMessage(getString(R.string.trigger_must_be_future))
         }
         val configuredResultTexts = resultTexts.text.toString()
@@ -186,19 +216,63 @@ class MainActivity : Activity() {
             return showMessage(getString(R.string.result_text_required))
         }
 
-        val config = repository.load().copy(
-            targetEpochMillis = effectiveTarget,
+        val savedConfig = repository.load().copy(
+            targetEpochMillis = parsedTarget,
             preTriggerOffsetMillis = parsedOffset,
             resultTexts = configuredResultTexts,
             visualFallbackEnabled = visualFallback.isChecked,
+            lowLatencyEnabled = lowLatency.isChecked,
+            visualFallbackDelayMillis = parsedFallbackDelay,
         )
-        repository.save(config)
-        control.arm(config).fold(
-            onSuccess = {
-                showInstruction(R.string.return_to_damai_manually)
+        val plan = ArmConfigPlan(savedConfig, immediateTest)
+        repository.save(plan.savedConfig)
+        Log.i(
+            LOG_TAG,
+            "Arm requested; immediateTest=$immediateTest target=${plan.savedConfig.targetEpochMillis}",
+        )
+        showInstruction(
+            if (immediateTest) {
+                R.string.return_to_damai_for_immediate_test
+            } else {
+                R.string.return_to_damai_manually
             },
-            onFailure = { showMessage(getString(R.string.arm_failed)) },
         )
+        control.armWhenDamaiForeground(
+            config = plan.savedConfig,
+            immediateTestDelayMillis = if (immediateTest) TEST_NOW_DELAY_MILLIS else null,
+            timeoutMillis = DAMAI_FOREGROUND_TIMEOUT_MILLIS,
+            pollIntervalMillis = DAMAI_FOREGROUND_POLL_MILLIS,
+            stableMillis = DAMAI_FOREGROUND_STABLE_MILLIS,
+        ) { result ->
+            result.onFailure { error ->
+                Log.w(LOG_TAG, "Service foreground arm failed", error)
+                showMessageOnUiThread(
+                    if (error.message == "Timed out waiting for Damai foreground") {
+                        R.string.damai_switch_timeout
+                    } else {
+                        R.string.arm_failed
+                    },
+                )
+            }
+        }.onFailure {
+            Log.w(LOG_TAG, "Failed to request service foreground arm", it)
+            showMessageOnUiThread(R.string.arm_failed)
+        }
+    }
+
+    private fun ensureShizukuReady(): Boolean {
+        if (!ShizukuShellTapper.isBinderAvailable()) {
+            showMessage("Shizuku 未运行，请先通过 adb 启动。")
+            return false
+        }
+        if (ShizukuShellTapper.hasPermission()) return true
+        if (ShizukuShellTapper.shouldShowRequestPermissionRationale()) {
+            showMessage("请在 Shizuku 中允许本应用使用 Shizuku。")
+            return false
+        }
+        ShizukuShellTapper.requestPermission()
+        showMessage("正在请求 Shizuku 权限，授权后请再次点击“开始待命”。")
+        return false
     }
 
     private fun showStageChooser() {
@@ -280,10 +354,13 @@ class MainActivity : Activity() {
         onReady: () -> Unit,
     ) {
         foregroundAwaitHandle?.cancel()
+        val foregroundProbe = DamaiForegroundProbe(
+            damaiPackage = DAMAI_PACKAGE,
+            foregroundPackage = app::foregroundPackage,
+            isDamaiActiveWindow = control::isDamaiActiveWindow,
+        )
         foregroundAwaitHandle = ForegroundPackageAwaiter(
-            currentPackage = {
-                if (control.isDamaiActiveWindow()) DAMAI_PACKAGE else null
-            },
+            currentPackage = foregroundProbe::currentPackage,
             nowMillis = SystemClock::elapsedRealtime,
             schedule = { delayMillis, action ->
                 mainHandler.postDelayed(action, delayMillis)
@@ -330,6 +407,50 @@ class MainActivity : Activity() {
             getString(if (connected) R.string.connected else R.string.disconnected),
             foreground,
         )
+        refreshShizukuStatus()
+    }
+
+    private fun refreshShizukuStatus(prewarm: Boolean = false) {
+        val status = ShizukuShellTapper.status()
+        shizukuStatus.text = getString(
+            R.string.shizuku_status_format,
+            getString(
+                if (status.serverRunning) {
+                    R.string.shizuku_running
+                } else {
+                    R.string.shizuku_not_running
+                },
+            ),
+            getString(
+                if (status.authorized) {
+                    R.string.shizuku_authorized
+                } else {
+                    R.string.shizuku_not_authorized
+                },
+            ),
+            getString(
+                if (status.bound) R.string.shizuku_bound else R.string.shizuku_not_bound,
+            ),
+            inputModeLabel(status.mode),
+        )
+        if (prewarm && status.serverRunning && status.authorized && !status.bound) {
+            Thread(
+                {
+                    ShizukuShellTapper.warmUp()
+                    runOnUiThread {
+                        if (resumed) refreshShizukuStatus()
+                    }
+                },
+                "shizuku-ui-warmup",
+            ).start()
+        }
+    }
+
+    private fun inputModeLabel(mode: InputMode): String = when (mode) {
+        InputMode.DIRECT_INJECT -> "直接注入"
+        InputMode.SHELL_INPUT -> "Shell input 兜底"
+        InputMode.ACCESSIBILITY_GESTURE -> "无障碍手势"
+        InputMode.UNAVAILABLE -> "尚不可用"
     }
 
     private fun renderSnapshot(snapshot: RuntimeSnapshot) {
@@ -426,6 +547,7 @@ class MainActivity : Activity() {
 
     private companion object {
         const val CONFIG_PREFERENCES = "automation_config"
+        const val LOG_TAG = "DamaiAssistant"
         const val DAMAI_PACKAGE = "cn.damai"
         const val DEFAULT_TARGET_DELAY_MILLIS = 5 * 60 * 1000L
         const val TEST_NOW_DELAY_MILLIS = 500L

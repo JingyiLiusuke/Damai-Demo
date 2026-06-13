@@ -18,6 +18,15 @@ data class PendingCalibration(
 interface AutomationControl {
     fun arm(config: AutomationConfig): Result<Unit>
 
+    fun armWhenDamaiForeground(
+        config: AutomationConfig,
+        immediateTestDelayMillis: Long?,
+        timeoutMillis: Long,
+        pollIntervalMillis: Long,
+        stableMillis: Long,
+        callback: (Result<Unit>) -> Unit,
+    ): Result<Unit>
+
     fun stop()
 
     fun isDamaiActiveWindow(): Boolean

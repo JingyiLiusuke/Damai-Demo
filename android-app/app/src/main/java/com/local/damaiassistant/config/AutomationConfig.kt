@@ -47,6 +47,39 @@ data class PixelRect(
         x = ((left.toLong() + right.toLong()) / 2L).toInt(),
         y = ((top.toLong() + bottom.toLong()) / 2L).toInt(),
     )
+
+    fun clipTo(bounds: PixelRect): PixelRect = PixelRect(
+        left = maxOf(left, bounds.left),
+        top = maxOf(top, bounds.top),
+        right = minOf(right, bounds.right),
+        bottom = minOf(bottom, bounds.bottom),
+    )
+
+    fun intersectionOrNull(bounds: PixelRect): PixelRect? {
+        val intersectionLeft = maxOf(left, bounds.left)
+        val intersectionTop = maxOf(top, bounds.top)
+        val intersectionRight = minOf(right, bounds.right)
+        val intersectionBottom = minOf(bottom, bounds.bottom)
+        if (
+            intersectionLeft >= intersectionRight ||
+            intersectionTop >= intersectionBottom
+        ) {
+            return null
+        }
+        return PixelRect(
+            intersectionLeft,
+            intersectionTop,
+            intersectionRight,
+            intersectionBottom,
+        )
+    }
+
+    fun union(other: PixelRect): PixelRect = PixelRect(
+        left = minOf(left, other.left),
+        top = minOf(top, other.top),
+        right = maxOf(right, other.right),
+        bottom = maxOf(bottom, other.bottom),
+    )
 }
 
 data class PixelPoint(val x: Int, val y: Int)
@@ -80,6 +113,8 @@ class AutomationConfig(
     val maxScreenshotsPerStage: Int,
     resultTexts: List<String>,
     val visualFallbackEnabled: Boolean,
+    val lowLatencyEnabled: Boolean = true,
+    val visualFallbackDelayMillis: Long = 300L,
 ) {
     private val normalizedResultTexts: List<String> =
         Collections.unmodifiableList(
@@ -99,6 +134,9 @@ class AutomationConfig(
             "Screenshot minimum interval must be nonnegative"
         }
         require(maxScreenshotsPerStage > 0) { "Maximum screenshots per stage must be positive" }
+        require(visualFallbackDelayMillis >= 0L) {
+            "Visual fallback delay must be nonnegative"
+        }
         require(normalizedResultTexts.isNotEmpty()) {
             "At least one nonblank result text is required"
         }
@@ -120,6 +158,8 @@ class AutomationConfig(
         maxScreenshotsPerStage: Int = this.maxScreenshotsPerStage,
         resultTexts: List<String> = this.normalizedResultTexts,
         visualFallbackEnabled: Boolean = this.visualFallbackEnabled,
+        lowLatencyEnabled: Boolean = this.lowLatencyEnabled,
+        visualFallbackDelayMillis: Long = this.visualFallbackDelayMillis,
     ): AutomationConfig = AutomationConfig(
         targetEpochMillis = targetEpochMillis,
         preTriggerOffsetMillis = preTriggerOffsetMillis,
@@ -133,6 +173,8 @@ class AutomationConfig(
         maxScreenshotsPerStage = maxScreenshotsPerStage,
         resultTexts = resultTexts,
         visualFallbackEnabled = visualFallbackEnabled,
+        lowLatencyEnabled = lowLatencyEnabled,
+        visualFallbackDelayMillis = visualFallbackDelayMillis,
     )
 
     override fun equals(other: Any?): Boolean {
@@ -150,7 +192,9 @@ class AutomationConfig(
             screenshotMinIntervalMillis == other.screenshotMinIntervalMillis &&
             maxScreenshotsPerStage == other.maxScreenshotsPerStage &&
             normalizedResultTexts == other.normalizedResultTexts &&
-            visualFallbackEnabled == other.visualFallbackEnabled
+            visualFallbackEnabled == other.visualFallbackEnabled &&
+            lowLatencyEnabled == other.lowLatencyEnabled &&
+            visualFallbackDelayMillis == other.visualFallbackDelayMillis
     }
 
     override fun hashCode(): Int {
@@ -166,6 +210,8 @@ class AutomationConfig(
         result = 31 * result + maxScreenshotsPerStage
         result = 31 * result + normalizedResultTexts.hashCode()
         result = 31 * result + visualFallbackEnabled.hashCode()
+        result = 31 * result + lowLatencyEnabled.hashCode()
+        result = 31 * result + visualFallbackDelayMillis.hashCode()
         return result
     }
 
@@ -182,7 +228,9 @@ class AutomationConfig(
             "screenshotMinIntervalMillis=$screenshotMinIntervalMillis, " +
             "maxScreenshotsPerStage=$maxScreenshotsPerStage, " +
             "resultTexts=$normalizedResultTexts, " +
-            "visualFallbackEnabled=$visualFallbackEnabled" +
+            "visualFallbackEnabled=$visualFallbackEnabled, " +
+            "lowLatencyEnabled=$lowLatencyEnabled, " +
+            "visualFallbackDelayMillis=$visualFallbackDelayMillis" +
             ")"
 
     companion object {
@@ -201,6 +249,8 @@ class AutomationConfig(
                 maxScreenshotsPerStage = 3,
                 resultTexts = listOf("支付", "订单", "提交成功"),
                 visualFallbackEnabled = true,
+                lowLatencyEnabled = true,
+                visualFallbackDelayMillis = 300L,
             )
         }
     }

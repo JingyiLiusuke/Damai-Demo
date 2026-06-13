@@ -11,6 +11,8 @@ import com.local.damaiassistant.domain.RuntimeSnapshot
 import com.local.damaiassistant.domain.Stage
 import com.local.damaiassistant.domain.TicketStateMachine
 import com.local.damaiassistant.domain.TriggerDeadline
+import com.local.damaiassistant.logging.PerformanceEvent
+import com.local.damaiassistant.logging.PerformanceTraceLogger
 import java.util.concurrent.Executor
 
 interface RuntimeClock {
@@ -67,6 +69,7 @@ class AutomationCoordinator(
     private val machine: TicketStateMachine = TicketStateMachine(),
     private val publish: (RuntimeSnapshot) -> Unit = {},
     private val log: (String, String, Long, Long) -> Unit = { _, _, _, _ -> },
+    private val performance: PerformanceTraceLogger? = null,
 ) {
     @Volatile
     private var currentSnapshot = RuntimeSnapshot()
@@ -79,6 +82,7 @@ class AutomationCoordinator(
             currentSnapshot = RuntimeSnapshot(
                 generation = currentSnapshot.generation + 1L,
             )
+            trace(PerformanceEvent.ARMED, reason = "automation armed")
             process(Input.Arm)
             try {
                 val deadline = TriggerDeadline.compute(
@@ -88,9 +92,14 @@ class AutomationCoordinator(
                     nowElapsedNanos = clock.elapsedNanos(),
                 )
                 val generation = currentSnapshot.generation
+                trace(
+                    PerformanceEvent.TRIGGER_DEADLINE,
+                    reason = deadline.toString(),
+                )
                 scheduler.scheduleTrigger(deadline) {
                     executor.execute {
                         if (currentSnapshot.generation == generation) {
+                            trace(PerformanceEvent.TRIGGER_FIRED)
                             process(Input.Trigger)
                         }
                     }
@@ -139,6 +148,22 @@ class AutomationCoordinator(
             clock.elapsedNanos(),
         )
         transition.effects.forEach { execute(it, config) }
+        if (
+            previous.state != transition.snapshot.state &&
+            transition.snapshot.state == RunState.DONE
+        ) {
+            trace(PerformanceEvent.RESULT_OBSERVED, stage = Stage.STAGE_3)
+        }
+        if (
+            previous.state != transition.snapshot.state &&
+            transition.snapshot.state in setOf(RunState.CANCELLED, RunState.FAILED)
+        ) {
+            trace(
+                PerformanceEvent.CANCELLED_OR_FAILED,
+                stage = currentStage(),
+                reason = transition.snapshot.message,
+            )
+        }
         if (
             transition.snapshot.generation != previous.generation &&
             transition.snapshot.state.isTimedStage()
@@ -197,18 +222,21 @@ class AutomationCoordinator(
         when (stage) {
             Stage.STAGE_1 -> {
                 if (observation.buyButtonVisible) {
+                    trace(PerformanceEvent.STAGE_OBSERVED, Stage.STAGE_2)
                     process(Input.FeatureObserved(Stage.STAGE_2))
                 }
             }
 
             Stage.STAGE_2 -> {
                 if (observation.submitTextVisible) {
+                    trace(PerformanceEvent.STAGE_OBSERVED, Stage.STAGE_3)
                     process(Input.FeatureObserved(Stage.STAGE_3))
                 }
             }
 
             Stage.STAGE_3 -> {
                 if (observation.resultTextVisible) {
+                    trace(PerformanceEvent.RESULT_OBSERVED, Stage.STAGE_3)
                     process(Input.ResultObserved)
                 }
             }
@@ -296,6 +324,21 @@ class AutomationCoordinator(
         this == RunState.STAGE_1_RESERVE ||
             this == RunState.STAGE_2_CONFIRM_PRICE ||
             this == RunState.STAGE_3_SUBMIT
+
+    private fun trace(
+        event: PerformanceEvent,
+        stage: Stage? = null,
+        reason: String? = null,
+    ) {
+        performance?.record(
+            event = event,
+            wallMillis = clock.wallMillis(),
+            elapsedNanos = clock.elapsedNanos(),
+            stage = stage,
+            foreground = TicketStateMachine.DAMAI_PACKAGE,
+            reason = reason,
+        )
+    }
 
     private fun AutomationConfig.boundsFor(stage: Stage): NormalizedRect = when (stage) {
         Stage.STAGE_1 -> stage1Rect

@@ -19,6 +19,39 @@ class ConfigRepositoryTest {
     }
 
     @Test
+    fun pixelRectClipsToActiveWindowBeforeComputingBottomButtonCenter() {
+        val fullDisplayRect = NormalizedRect(
+            left = 0.5603124f,
+            top = 0.933097f,
+            right = 0.94503224f,
+            bottom = 0.9893664f,
+        ).toPixels(width = 1344, height = 2772)
+        val damaiWindow = PixelRect(0, 0, 1344, 2632)
+
+        assertEquals(PixelPoint(1011, 2609), fullDisplayRect.clipTo(damaiWindow).center())
+    }
+
+    @Test
+    fun pixelRectUnionTracksVisibleContentBounds() {
+        val first = PixelRect(10, 20, 50, 80)
+        val second = PixelRect(40, 0, 90, 60)
+
+        assertEquals(PixelRect(10, 0, 90, 80), first.union(second))
+    }
+
+    @Test
+    fun pixelRectIntersectionReturnsNullWhenWindowsDoNotOverlap() {
+        val stageButton = PixelRect(700, 2500, 1200, 2700)
+        val newWindow = PixelRect(0, 140, 1344, 2400)
+
+        assertEquals(null, stageButton.intersectionOrNull(newWindow))
+        assertEquals(
+            PixelRect(700, 2500, 1200, 2600),
+            stageButton.intersectionOrNull(PixelRect(0, 0, 1344, 2600)),
+        )
+    }
+
+    @Test
     fun normalizedRectRejectsNonFiniteOrUnorderedEdges() {
         val invalidRects = listOf(
             { NormalizedRect(Float.NaN, 0f, 1f, 1f) },
@@ -72,6 +105,8 @@ class ConfigRepositoryTest {
         assertEquals(3, config.maxScreenshotsPerStage)
         assertEquals(listOf("支付", "订单", "提交成功"), config.resultTexts)
         assertEquals(true, config.visualFallbackEnabled)
+        assertEquals(true, config.lowLatencyEnabled)
+        assertEquals(300L, config.visualFallbackDelayMillis)
     }
 
     @Test
@@ -179,6 +214,8 @@ class ConfigRepositoryTest {
             maxScreenshotsPerStage = 7,
             resultTexts = listOf(" Paid ", "Order ready", "Complete"),
             visualFallbackEnabled = false,
+            lowLatencyEnabled = false,
+            visualFallbackDelayMillis = 375L,
         )
 
         repository.save(config)
@@ -236,6 +273,8 @@ class ConfigRepositoryTest {
         maxScreenshotsPerStage: Int = 2,
         resultTexts: List<String> = listOf("done"),
         visualFallbackEnabled: Boolean = true,
+        lowLatencyEnabled: Boolean = true,
+        visualFallbackDelayMillis: Long = 300L,
     ): AutomationConfig = AutomationConfig(
         targetEpochMillis = targetEpochMillis,
         preTriggerOffsetMillis = preTriggerOffsetMillis,
@@ -249,6 +288,8 @@ class ConfigRepositoryTest {
         maxScreenshotsPerStage = maxScreenshotsPerStage,
         resultTexts = resultTexts,
         visualFallbackEnabled = visualFallbackEnabled,
+        lowLatencyEnabled = lowLatencyEnabled,
+        visualFallbackDelayMillis = visualFallbackDelayMillis,
     )
 
     private class FakeKeyValueStore : KeyValueStore {

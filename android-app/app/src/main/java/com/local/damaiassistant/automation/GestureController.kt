@@ -46,9 +46,16 @@ class GestureController(
     ) {
         val path = Path().apply {
             moveTo(point.x.toFloat(), point.y.toFloat())
+            lineTo(point.x + TOUCH_PATH_DELTA, point.y + TOUCH_PATH_DELTA)
         }
         val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0L, 1L))
+            .addStroke(
+                GestureDescription.StrokeDescription(
+                    path,
+                    0L,
+                    CLICK_DURATION_MILLIS,
+                ),
+            )
             .build()
         val resultCallback = object : AccessibilityService.GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription) {
@@ -98,4 +105,9 @@ class GestureController(
         val generation: Long,
         val callback: (Long, Boolean) -> Unit,
     )
+
+    private companion object {
+        const val CLICK_DURATION_MILLIS = 180L
+        const val TOUCH_PATH_DELTA = 1f
+    }
 }

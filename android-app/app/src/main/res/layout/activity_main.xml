@@ -82,6 +82,19 @@
             android:textStyle="bold" />
 
         <Switch
+            android:id="@+id/low_latency_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/low_latency_label" />
+
+        <EditText
+            android:id="@+id/visual_fallback_delay_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/visual_fallback_delay_hint"
+            android:inputType="number" />
+
+        <Switch
             android:id="@+id/visual_fallback_switch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -107,6 +120,18 @@
             android:id="@+id/accessibility_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/shizuku_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:text="@string/shizuku_usage_help" />
 
         <TextView
             android:id="@+id/run_state"
