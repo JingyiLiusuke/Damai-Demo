@@ -20,6 +20,7 @@ class AutomationCoordinatorTest {
     private val gestures = FakeGestures()
     private val visuals = FakeVisuals()
     private val published = mutableListOf<RunState>()
+    private val logs = mutableListOf<String>()
     private val config = AutomationConfig.defaults().copy(
         targetEpochMillis = 2_000L,
         preTriggerOffsetMillis = 100L,
@@ -32,6 +33,7 @@ class AutomationCoordinatorTest {
         gestures = gestures,
         visuals = visuals,
         publish = { published += it.state },
+        log = { _, message, _, _ -> logs += message },
     )
 
     @Test
@@ -55,6 +57,36 @@ class AutomationCoordinatorTest {
 
         assertEquals(RunState.STAGE_1_RESERVE, coordinator.snapshot().state)
         assertEquals(listOf(Stage.STAGE_1), nodes.inspections)
+    }
+
+    @Test
+    fun unchangedForegroundEventsAreNotLoggedRepeatedly() {
+        coordinator.arm(config)
+        executor.runAll()
+        logs.clear()
+
+        coordinator.onWindowChanged("cn.damai")
+        coordinator.onWindowChanged("cn.damai")
+        executor.runAll()
+
+        assertTrue(logs.isEmpty())
+    }
+
+    @Test
+    fun foregroundCancellationLogIncludesObservedPackage() {
+        coordinator.arm(config)
+        executor.runAll()
+        logs.clear()
+
+        coordinator.onWindowChanged("com.local.damaiassistant")
+        executor.runAll()
+
+        assertEquals(RunState.CANCELLED, coordinator.snapshot().state)
+        assertTrue(
+            logs.single().contains(
+                "ForegroundPackage(package=com.local.damaiassistant)",
+            ),
+        )
     }
 
     @Test

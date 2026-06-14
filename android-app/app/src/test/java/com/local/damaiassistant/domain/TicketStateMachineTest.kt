@@ -369,6 +369,22 @@ class TicketStateMachineTest {
     }
 
     @Test
+    fun foregroundCancellationIncludesObservedPackage() {
+        val transition = machine.reduce(
+            stage1Snapshot(),
+            Input.ForegroundPackage("com.local.damaiassistant"),
+            config,
+            50L,
+        )
+
+        assertEquals(RunState.CANCELLED, transition.snapshot.state)
+        assertEquals(
+            "Damai is no longer foreground: com.local.damaiassistant",
+            transition.snapshot.message,
+        )
+    }
+
+    @Test
     fun damaiPackageAndDuplicateArmDoNotChangeActiveRun() {
         val snapshot = stage1Snapshot()
 

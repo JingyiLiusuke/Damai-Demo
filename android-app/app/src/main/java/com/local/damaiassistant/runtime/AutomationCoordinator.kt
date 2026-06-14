@@ -140,13 +140,19 @@ class AutomationCoordinator(
         )
         currentSnapshot = transition.snapshot
         publish(transition.snapshot)
-        log(
-            "state",
-            "${input.javaClass.simpleName}: ${transition.snapshot.state} " +
-                transition.snapshot.message,
-            clock.wallMillis(),
-            clock.elapsedNanos(),
-        )
+        val unchangedForegroundEvent =
+            input is Input.ForegroundPackage &&
+                transition.snapshot == previous &&
+                transition.effects.isEmpty()
+        if (!unchangedForegroundEvent) {
+            log(
+                "state",
+                "${input.logLabel()}: ${transition.snapshot.state} " +
+                    transition.snapshot.message,
+                clock.wallMillis(),
+                clock.elapsedNanos(),
+            )
+        }
         transition.effects.forEach { execute(it, config) }
         if (
             previous.state != transition.snapshot.state &&
@@ -350,5 +356,10 @@ class AutomationCoordinator(
         Stage.STAGE_1 -> stage1
         Stage.STAGE_2 -> stage2
         Stage.STAGE_3 -> stage3
+    }
+
+    private fun Input.logLabel(): String = when (this) {
+        is Input.ForegroundPackage -> "ForegroundPackage(package=${packageName ?: "unknown"})"
+        else -> javaClass.simpleName
     }
 }

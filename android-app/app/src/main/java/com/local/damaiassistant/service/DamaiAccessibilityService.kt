@@ -139,6 +139,7 @@ class DamaiAccessibilityService : AccessibilityService() {
             eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
                 eventPackage == this.packageName -> {
                 app.updateForegroundPackage(eventPackage)
+                coordinator.onWindowChanged(eventPackage)
             }
 
             eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
@@ -223,6 +224,10 @@ class DamaiAccessibilityService : AccessibilityService() {
         override fun stop() {
             foregroundArmGeneration.incrementAndGet()
             if (!closed.get()) coordinator.stop()
+        }
+
+        override fun foregroundChanged(packageName: String?) {
+            if (!closed.get()) coordinator.onWindowChanged(packageName)
         }
 
         override fun isDamaiActiveWindow(): Boolean =

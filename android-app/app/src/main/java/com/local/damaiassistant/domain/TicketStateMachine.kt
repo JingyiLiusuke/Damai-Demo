@@ -27,7 +27,10 @@ class TicketStateMachine {
 
             is Input.ForegroundPackage -> {
                 if (snapshot.state.isActive() && input.packageName != DAMAI_PACKAGE) {
-                    return cancel(snapshot, "Damai is no longer foreground")
+                    return cancel(
+                        snapshot,
+                        "Damai is no longer foreground: ${input.packageName ?: "unknown"}",
+                    )
                 }
             }
 
