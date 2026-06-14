@@ -92,7 +92,7 @@ class MainActivity : Activity() {
         resumed = true
         val control = app.automationControl()
         if (app.snapshot().state in ACTIVE_STATES) {
-            control?.stop()
+            control?.foregroundChanged(packageName)
         }
         loadConfig()
         refreshConnectionStatus()
@@ -522,7 +522,10 @@ class MainActivity : Activity() {
             "已达到提交点击上限，等待成功结果文字确认"
         message == "Configured result feature observed" -> "检测到配置的成功结果文字"
         message == "Automation cancelled" -> "自动化流程已取消"
-        message == "Damai is no longer foreground" -> "大麦已离开前台，流程自动取消"
+        message.startsWith("Damai is no longer foreground:") -> {
+            val foregroundPackage = message.substringAfter(':').trim()
+            "大麦已离开前台，检测到前台应用：$foregroundPackage，流程自动取消"
+        }
         message == "Stage timed out" -> "当前阶段已超时"
         message == "Stage click limit reached" -> "当前阶段已达到点击次数上限"
         message.startsWith("STAGE_2 node click requested") -> "已请求点击“确定票价”节点"

@@ -10,4 +10,3 @@ android-app/**/build/
 
 # Local QA evidence and distributable APKs
 /build/
-/dist/

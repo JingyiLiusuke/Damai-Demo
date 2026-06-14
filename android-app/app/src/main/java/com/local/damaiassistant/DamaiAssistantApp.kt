@@ -29,6 +29,8 @@ interface AutomationControl {
 
     fun stop()
 
+    fun foregroundChanged(packageName: String?)
+
     fun isDamaiActiveWindow(): Boolean
 
     fun captureCalibration(stage: Stage, callback: (Result<Bitmap>) -> Unit)
